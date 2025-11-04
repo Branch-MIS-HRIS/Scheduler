@@ -143,3 +143,94 @@ table th, table td {
 /* Keep user's custom classes (from original file) intact by not overriding them harshly */
 :root{ --fc-border-color: #e2e8f0; --fc-daygrid-event-dot-width: 8px; --fc-list-event-dot-width: 8px; }
 .validation-error { border-color: #ef4444 !important; box-shadow: 0 0 0 2px #fecaca;}
+
+
+
+
+/* ---------- Premium Enhancements ---------- */
+
+/* Import a premium-like font fallback (keeps Inter as main) */
+body { font-family: 'Inter', 'Poppins', system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial; }
+
+/* Header: add subtle brand bar and profile */
+header .brand-badge {
+  display:inline-flex; align-items:center; gap:10px; padding:6px 10px; border-radius:12px;
+  background: linear-gradient(90deg, rgba(14,165,233,0.12), rgba(16,185,129,0.06));
+  border: 1px solid rgba(2,6,23,0.03);
+  box-shadow: 0 6px 20px rgba(2,6,23,0.04);
+}
+header .brand-badge .logo {
+  width:36px; height:36px; background:linear-gradient(135deg,#0ea5e9,#0284c7); border-radius:8px; display:inline-grid; place-items:center; color:white; font-weight:700;
+  box-shadow: 0 6px 18px rgba(14,165,233,0.18), inset 0 -6px 18px rgba(0,0,0,0.06);
+}
+
+/* Top buttons */
+header button#export-btn, header button#reset-btn {
+  border-radius:10px; padding:10px 14px; font-weight:600;
+  box-shadow: 0 8px 28px rgba(2,6,23,0.06);
+}
+
+/* Theme toggle */
+#theme-toggle-btn { box-shadow: 0 6px 18px rgba(2,6,23,0.04); border-radius:10px; }
+
+/* Sidebar: premium nav look */
+aside { padding:18px; }
+aside h2 { font-weight:700; color:#0f172a; letter-spacing: -0.2px; }
+#draggable-cards-container .font-medium { font-size:14px; }
+
+/* Calendar container */
+#calendar {
+  border-radius: 16px;
+  padding: 18px;
+  background: linear-gradient(180deg, rgba(255,255,255,0.95), rgba(246,249,252,0.9));
+  border: 1px solid rgba(2,6,23,0.04);
+  box-shadow: 0 20px 60px rgba(2,6,23,0.06);
+}
+
+/* Event visuals */
+.fc-event-work {
+  background: linear-gradient(135deg, #2b6cb0 0%, #075985 100%) !important;
+  color: #fff !important;
+  border: none !important;
+  padding: 6px 10px !important;
+  font-weight:700 !important;
+  letter-spacing: -0.2px;
+  border-radius: 12px !important;
+  box-shadow: 0 10px 30px rgba(2,6,23,0.12);
+  transform-origin: center left;
+}
+.fc-event-rest {
+  background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%) !important;
+  color: #fff !important;
+  border: none !important;
+  padding: 6px 10px !important;
+  font-weight:700 !important;
+  border-radius: 12px !important;
+  box-shadow: 0 10px 30px rgba(2,6,23,0.12);
+}
+
+/* Event mirror (when dragging) */
+.fc-event.fc-event-work, .fc-event.fc-event-rest {
+  opacity: 0.98 !important;
+  transform: translateZ(0);
+}
+
+/* Make the small shift code text look premium */
+.fc-event .text-xs { font-weight:600; color: rgba(255,255,255,0.9); }
+
+/* Conflict emphasis: gold outline + soft glow */
+.fc-event-conflict {
+  box-shadow: 0 6px 20px rgba(250,204,21,0.12), 0 18px 60px rgba(2,6,23,0.08) !important;
+  transform: translateY(-2px) !important;
+  border-radius: 14px !important;
+}
+
+/* Legend pills */
+.legend-pill { padding:10px 14px; font-size:14px; }
+
+/* Modals: more refined */
+.modal-backdrop > div { border-radius: 14px; }
+#shift-modal .ts-dropdown, #shift-modal .ts-control { border-radius:10px; }
+
+/* Hover interactions */
+.fc-daygrid-day:hover { background: linear-gradient(90deg, rgba(14,165,233,0.03), rgba(15,23,42,0.01)); transition: background 180ms ease; }

@@ -444,12 +444,38 @@ function loadFromLocalStorage() {
             /**
              * Initializes the Draggable instance for the sidebar cards.
              */
+            
             function initializeDraggable() {
                 // Destroy previous instance if it exists
                 if (draggable) {
-                    draggable.destroy();
+                    try { draggable.destroy(); } catch(e) { /* ignore */ }
                 }
                 
+                const containerEl = document.getElementById('draggable-cards-container');
+                draggable = new FullCalendar.Draggable(containerEl, {
+                    itemSelector: '.fc-event-pill',
+                    eventData: function (eventEl) {
+                        // Cache parsed event data on the element to avoid repeated JSON.parse calls
+                        if (eventEl._fcEventData) return eventEl._fcEventData;
+                        try {
+                            const parsed = JSON.parse(eventEl.getAttribute('data-event'));
+                            // ensure classNames mirror the type so the drag preview shows correct color
+                            const t = parsed.extendedProps && parsed.extendedProps.type ? parsed.extendedProps.type : '';
+                            parsed.classNames = t === 'rest' ? ['fc-event-rest'] : ['fc-event-work'];
+                            // also include a lightweight style hint for the mirror element
+                            parsed.backgroundColor = t === 'rest' ? '#ef4444' : '#2563eb';
+                            // store back
+                            eventEl._fcEventData = parsed;
+                            return parsed;
+                        } catch (err) {
+                            console.error('Invalid event data on draggable element', err);
+                            return null;
+                        }
+                    }
+                });
+            }
+
+
                 const containerEl = document.getElementById('draggable-cards-container');
                 draggable = new FullCalendar.Draggable(containerEl, {
                     itemSelector: '.fc-event-pill',
