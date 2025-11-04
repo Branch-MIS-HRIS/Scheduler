@@ -234,3 +234,16 @@ aside h2 { font-weight:700; color:#0f172a; letter-spacing: -0.2px; }
 
 /* Hover interactions */
 .fc-daygrid-day:hover { background: linear-gradient(90deg, rgba(14,165,233,0.03), rgba(15,23,42,0.01)); transition: background 180ms ease; }
+
+
+/* Ensure the drag preview (mirror) reflects correct color */
+.fc-mirror.fc-event-work {
+  background-color: #2563eb !important;
+  color: #fff !important;
+  border: none !important;
+}
+.fc-mirror.fc-event-rest {
+  background-color: #ef4444 !important;
+  color: #fff !important;
+  border: none !important;
+}
