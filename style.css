@@ -252,4 +252,8 @@ aside h2 { font-weight:700; color:#0f172a; letter-spacing: -0.2px; }
   box-shadow: 0 6px 20px rgba(0,0,0,0.08);
   transition: all 0.2s ease;
 }
+#draggable-cards-container .fc-event-pill:hover {
+  transform: scale(1.05);
+  transition: transform 0.2s ease;
+}
 
