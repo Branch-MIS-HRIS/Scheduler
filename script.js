@@ -480,7 +480,30 @@ function loadFromLocalStorage() {
              */
             function addEmployeeRow() {
                 if (!employeeTableBody) {
-                    console.warn('employee-table-body not found in DOM.');
+                    console.warn('employee-table-body not found in DOM. Creating fallback table.');
+                    // create a minimal table fallback so adding rows still works
+                    const sidebar = document.querySelector('aside') || document.body;
+                    const wrapper = document.createElement('div');
+                    wrapper.innerHTML = `
+                      <div class="p-4 bg-white border border-gray-200 rounded-xl shadow-sm">
+                        <div class="overflow-x-auto">
+                          <table class="w-full text-sm">
+                            <thead class="text-left text-gray-500">
+                              <tr>
+                                <th class="p-2">Name</th><th class="p-2">Employee No.</th><th class="p-2">Position</th><th class="p-2 w-10"></th>
+                              </tr>
+                            </thead>
+                            <tbody id="employee-table-body"></tbody>
+                          </table>
+                        </div>
+                      </div>
+                    `;
+                    sidebar.insertBefore(wrapper, sidebar.firstChild);
+                    // rebind the variable (note: outer const can't be reassigned; use DOM lookup below)
+                }
+                const tbody = document.getElementById('employee-table-body');
+                if (!tbody) {
+                    console.error('Unable to locate or create employee table body.');
                     return;
                 }
 
@@ -511,7 +534,7 @@ function loadFromLocalStorage() {
                         </button>
                     </td>
                 `;
-                employeeTableBody.appendChild(tr);
+                tbody.appendChild(tr);
             }
 
             /**
@@ -1087,6 +1110,18 @@ if (shiftSearchInput && shiftPresetSelect) {
             // --- EVENT LISTENERS ---
             const addRowBtnEl = document.getElementById('add-row-btn');
             if (addRowBtnEl) addRowBtnEl.addEventListener('click', addEmployeeRow);
+
+            // Defensive fallback: also delegate clicks on document to ensure the button works even if an earlier error prevented the above binding
+            document.addEventListener('click', function (e) {
+              const btn = e.target.closest && e.target.closest('#add-row-btn');
+              if (btn) {
+                try { addEmployeeRow(); } catch (err) { console.error('addEmployeeRow error (fallback):', err); }
+              }
+            });
+
+            // Expose for debugging / REPL use
+            try { window.addEmployeeRow = addEmployeeRow; } catch(e){}
+
             const saveGenerateBtnEl = document.getElementById('save-generate-btn');
             if (saveGenerateBtnEl) saveGenerateBtnEl.addEventListener('click', saveAndGenerate);
             if (employeeTableBody) {
