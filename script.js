@@ -688,46 +688,72 @@ const color = employeeColors[empNo];
                     return;
                 }
 
-                // --- Generate Cards ---
-                Object.values(employees).forEach(emp => {
-                    const workEventData = {
-                        title: emp.name,
-                        extendedProps: {
-                            type: 'work',
-                            empNo: emp.empNo,
-                            position: emp.position
-                        }
-                    };
-                    
-                    const restEventData = {
-                        title: emp.name,
-                        extendedProps: {
-                            type: 'rest',
-                            empNo: emp.empNo,
-                            position: emp.position
-                        }
-                    };
+// --- Generate Cards with Persistent Colors ---
+Object.values(employees).forEach(emp => {
+  const workEventData = {
+    title: emp.name,
+    extendedProps: {
+      type: 'work',
+      empNo: emp.empNo,
+      position: emp.position
+    }
+  };
 
-                    const cardHtml = `
-                        <div class="p-3 bg-white rounded-lg shadow-sm border border-gray-200" data-empno="${emp.empNo}">
-                            <div class="flex items-center justify-between">
-                                <div>
-                                    <div class="font-medium text-gray-800">${emp.name}</div>
-                                    <div class="text-xs text-gray-500">${emp.position}</div>
-                                </div>
-                                <div class="flex space-x-2">
-                                    <div class='fc-event-pill fc-event-work px-3 py-1 text-xs font-medium rounded-full' data-event='${JSON.stringify(workEventData)}'>
-                                        🟦 Work
-                                    </div>
-                                    <div class='fc-event-pill fc-event-rest px-3 py-1 text-xs font-medium rounded-full' data-event='${JSON.stringify(restEventData)}'>
-                                        🔴 Rest
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    `;
-                    if (draggableCardsContainer) draggableCardsContainer.innerHTML += cardHtml;
-                });
+  const restEventData = {
+    title: emp.name,
+    extendedProps: {
+      type: 'rest',
+      empNo: emp.empNo,
+      position: emp.position
+    }
+  };
+
+  // --- Assign or reuse color for employee ---
+  const baseColors = [
+    '#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#14b8a6',
+    '#ef4444', '#22c55e', '#eab308', '#0ea5e9', '#6366f1', '#84cc16',
+    '#d946ef', '#0d9488', '#fb923c', '#a855f7', '#475569', '#f97316',
+    '#64748b', '#60a5fa', '#65a30d', '#f43f5e', '#059669', '#7c3aed',
+    '#e11d48', '#9333ea', '#2563eb', '#9ca3af', '#15803d'
+  ];
+
+  if (!employeeColors[emp.empNo]) {
+    const usedColors = Object.values(employeeColors);
+    const availableColors = baseColors.filter(c => !usedColors.includes(c));
+    const color = availableColors.length
+      ? availableColors[0]
+      : baseColors[Object.keys(employeeColors).length % baseColors.length];
+    employeeColors[emp.empNo] = color;
+  }
+  const color = employeeColors[emp.empNo];
+
+  // --- Draggable Card UI ---
+  const cardHtml = `
+    <div class="p-3 bg-white rounded-lg shadow-sm border border-gray-200" data-empno="${emp.empNo}">
+      <div class="flex items-center justify-between">
+        <div>
+          <div class="font-medium text-gray-800">${emp.name}</div>
+          <div class="text-xs text-gray-500">${emp.position}</div>
+        </div>
+        <div class="flex space-x-2">
+          <div
+            class='fc-event-pill fc-event-work px-3 py-1 text-xs font-medium rounded-full'
+            data-event='${JSON.stringify(workEventData)}'
+            style="background:${color}; color:#fff; border:none;">
+            🟦 Work
+          </div>
+          <div
+            class='fc-event-pill fc-event-rest px-3 py-1 text-xs font-medium rounded-full'
+            data-event='${JSON.stringify(restEventData)}'
+            style="background:#fff; color:${color}; border:2px solid ${color};">
+            🔴 Rest
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+  if (draggableCardsContainer) draggableCardsContainer.innerHTML += cardHtml;
+});
                 
                 if (draggablePlaceholder) draggablePlaceholder.classList.add('hidden');
                 
