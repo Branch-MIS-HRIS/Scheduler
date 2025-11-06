@@ -108,7 +108,7 @@ const shiftTimes = {
   "RBT-045": "8:30AM - 6:30PM",
   "RBT-046": "11:30AM - 9:30PM",
   "RBT-047": "10:30AM - 8:30PM",
-  "RBT-048": "11:30AM - 9:30PM",
+  "RBT-048": "11:30PM - 9:30PM",
   "RBT-049": "12:30PM - 10:30PM",
   "RBT-050": "7:30AM - 5:30PM",
   "RBT-051": "6:00PM - 4:00AM",
@@ -386,7 +386,8 @@ eventDidMount: function(info) {
 
   // 🔸 Generate gradient tints from a base hex color
 function getGradientFromBaseColor(hex, type = 'work') {
-  // Convert hex to HSL for gradient manipulation
+  if (!hex || hex[0] !== '#') return '';
+  // Convert hex to RGB
   const rgb = parseInt(hex.slice(1), 16);
   const r = (rgb >> 16) & 255;
   const g = (rgb >> 8) & 255;
@@ -395,12 +396,13 @@ function getGradientFromBaseColor(hex, type = 'work') {
   const [h, s, l] = hsl;
 
   if (type === 'work') {
-    return `linear-gradient(135deg, hsl(${h}, ${s * 100}%, ${Math.max(25, l * 100 - 10)}%), hsl(${h}, ${s * 100}%, ${Math.min(70, l * 100 + 10)}%))`;
+    return `linear-gradient(135deg, hsl(${h}, ${Math.round(s * 100)}%, ${Math.max(25, Math.round(l * 100) - 10)}%), hsl(${h}, ${Math.round(s * 100)}%, ${Math.min(70, Math.round(l * 100) + 10)}%))`;
   } else {
-    return `linear-gradient(135deg, hsl(${h}, ${s * 100}%, ${Math.min(90, l * 100 + 20)}%), hsl(${h}, ${s * 100}%, ${Math.min(95, l * 100 + 25)}%))`;
+    return `linear-gradient(135deg, hsl(${h}, ${Math.round(s * 100)}%, ${Math.min(90, Math.round(l * 100) + 20)}%), hsl(${h}, ${Math.round(s * 100)}%, ${Math.min(95, Math.round(l * 100) + 25)}%))`;
   }
 }
 
+/* ====== MOVED HELPERS: make gradient/color helpers top-level so other code can use them ====== */
 function rgbToHsl(r, g, b) {
   r /= 255; g /= 255; b /= 255;
   const max = Math.max(r, g, b), min = Math.min(r, g, b);
@@ -417,6 +419,23 @@ function rgbToHsl(r, g, b) {
     h /= 6;
   }
   return [Math.round(h * 360), s, l];
+}
+
+function getGradientFromBaseColor(hex, type = 'work') {
+  if (!hex || hex[0] !== '#') return '';
+  // Convert hex to RGB
+  const rgb = parseInt(hex.slice(1), 16);
+  const r = (rgb >> 16) & 255;
+  const g = (rgb >> 8) & 255;
+  const b = rgb & 255;
+  const hsl = rgbToHsl(r, g, b);
+  const [h, s, l] = hsl;
+
+  if (type === 'work') {
+    return `linear-gradient(135deg, hsl(${h}, ${Math.round(s * 100)}%, ${Math.max(25, Math.round(l * 100) - 10)}%), hsl(${h}, ${Math.round(s * 100)}%, ${Math.min(70, Math.round(l * 100) + 10)}%))`;
+  } else {
+    return `linear-gradient(135deg, hsl(${h}, ${Math.round(s * 100)}%, ${Math.min(90, Math.round(l * 100) + 20)}%), hsl(${h}, ${Math.round(s * 100)}%, ${Math.min(95, Math.round(l * 100) + 25)}%))`;
+  }
 }
 
 // --- Persistent Unique Employee Color Assignment (solid vs border) ---
