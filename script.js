@@ -413,23 +413,46 @@ const color = employeeColors[empNo];
     // Use setProperty with 'important' to override stylesheet rules that use !important
     try {
       info.el.style.setProperty('background', color, 'important');
+      info.el.style.setProperty('background-image', 'none', 'important');
       info.el.style.setProperty('color', '#fff', 'important');
       info.el.style.setProperty('border', 'none', 'important');
+      // Also apply to inner event frame so the gradient from .fc-event-work can't show through
+      const inner = info.el.querySelector('.fc-event-main-frame') || info.el;
+      inner.style.setProperty('background', color, 'important');
+      inner.style.setProperty('background-image', 'none', 'important');
+      inner.style.setProperty('color', '#fff', 'important');
     } catch (e) {
       // Fallback if setProperty isn't supported for some reason
       info.el.style.backgroundColor = color;
+      info.el.style.backgroundImage = 'none';
       info.el.style.color = '#fff';
       info.el.style.border = 'none';
+      const inner = info.el.querySelector('.fc-event-main-frame') || info.el;
+      inner.style.backgroundColor = color;
+      inner.style.backgroundImage = 'none';
+      inner.style.color = '#fff';
     }
   } else if (type === 'rest') {
     try {
       info.el.style.setProperty('background', '#fff', 'important');
+      info.el.style.setProperty('background-image', 'none', 'important');
       info.el.style.setProperty('color', color, 'important');
       info.el.style.setProperty('border', `2px solid ${color}`, 'important');
+      const inner = info.el.querySelector('.fc-event-main-frame') || info.el;
+      inner.style.setProperty('background', '#fff', 'important');
+      inner.style.setProperty('background-image', 'none', 'important');
+      inner.style.setProperty('color', color, 'important');
+      inner.style.setProperty('border', `2px solid ${color}`, 'important');
     } catch (e) {
       info.el.style.backgroundColor = '#fff';
+      info.el.style.backgroundImage = 'none';
       info.el.style.border = `2px solid ${color}`;
       info.el.style.color = color;
+      const inner = info.el.querySelector('.fc-event-main-frame') || info.el;
+      inner.style.backgroundColor = '#fff';
+      inner.style.backgroundImage = 'none';
+      inner.style.border = `2px solid ${color}`;
+      inner.style.color = color;
     }
   }
 
@@ -516,7 +539,9 @@ const color = employeeColors[empNo];
                               const parsed = JSON.parse(eventEl.getAttribute('data-event'));
                               const t = parsed.extendedProps && parsed.extendedProps.type ? parsed.extendedProps.type : '';
                               parsed.classNames = t === 'rest' ? ['fc-event-rest'] : ['fc-event-work'];
-                              parsed.backgroundColor = t === 'rest' ? '#ef4444' : '#2563eb';
+-                              parsed.backgroundColor = t === 'rest' ? '#ef4444' : '#2563eb';
++                              // Do NOT set backgroundColor here — let eventDidMount apply per-employee colors.
++                              // parsed.backgroundColor = t === 'rest' ? '#ef4444' : '#2563eb';
                               eventEl._fcEventData = parsed;
                               return parsed;
                           } catch (err) {
@@ -657,7 +682,7 @@ const color = employeeColors[empNo];
                 }
 
                 // --- Generate Cards ---
-                Object.values(employees).forEach(emp => {
+                Object.values(employees).forEach emp => {
                     const workEventData = {
                         title: emp.name,
                         extendedProps: {
