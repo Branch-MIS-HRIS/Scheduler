@@ -410,13 +410,27 @@ const color = employeeColors[empNo];
 
 
   if (type === 'work') {
-    info.el.style.backgroundColor = color;
-    info.el.style.color = '#fff';
-    info.el.style.border = 'none';
+    // Use setProperty with 'important' to override stylesheet rules that use !important
+    try {
+      info.el.style.setProperty('background', color, 'important');
+      info.el.style.setProperty('color', '#fff', 'important');
+      info.el.style.setProperty('border', 'none', 'important');
+    } catch (e) {
+      // Fallback if setProperty isn't supported for some reason
+      info.el.style.backgroundColor = color;
+      info.el.style.color = '#fff';
+      info.el.style.border = 'none';
+    }
   } else if (type === 'rest') {
-    info.el.style.backgroundColor = '#fff';
-    info.el.style.border = `2px solid ${color}`;
-    info.el.style.color = color;
+    try {
+      info.el.style.setProperty('background', '#fff', 'important');
+      info.el.style.setProperty('color', color, 'important');
+      info.el.style.setProperty('border', `2px solid ${color}`, 'important');
+    } catch (e) {
+      info.el.style.backgroundColor = '#fff';
+      info.el.style.border = `2px solid ${color}`;
+      info.el.style.color = color;
+    }
   }
 
   try {
