@@ -61,12 +61,25 @@ aside {
 
 /* Draggable cards container */
 #draggable-cards-container > div {
-  transition: transform 250ms cubic-bezier(.2,.9,.3,1), box-shadow 250ms;
-  border-radius: 10px;
+  transition: transform 200ms cubic-bezier(.2,.9,.3,1), box-shadow 200ms;
+  border-radius: 12px;
+  padding: 6px 10px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  box-shadow: 0 6px 18px rgba(2,6,23,0.06);
+}
+#draggable-cards-container > div[data-type="work"] {
+  background: linear-gradient(135deg, #2563eb, #3b82f6);
+}
+#draggable-cards-container > div[data-type="rest"] {
+  background: linear-gradient(135deg, #ef4444, #fb7185);
 }
 #draggable-cards-container > div:hover {
-  transform: translateY(-4px);
-  box-shadow: 0 10px 30px rgba(2,6,23,0.06);
+  transform: translateY(-2px);
+  box-shadow: 0 10px 30px rgba(2,6,23,0.08);
 }
 
 /* Pills */
@@ -237,15 +250,22 @@ aside h2 { font-weight:700; color:#0f172a; letter-spacing: -0.2px; }
 
 
 /* Ensure the drag preview (mirror) reflects correct color */
+.fc-mirror.fc-event-work,
+.fc-mirror.fc-event-rest {
+  border-radius: 12px !important;
+  padding: 6px 10px !important;
+  font-weight: 700 !important;
+  opacity: 0.95 !important;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 6px 20px rgba(0,0,0,0.1);
+}
 .fc-mirror.fc-event-work {
-  background-color: #2563eb !important;
-  color: #fff !important;
-  border: none !important;
+  background: linear-gradient(135deg, #2563eb, #3b82f6) !important;
 }
 .fc-mirror.fc-event-rest {
-  background-color: #ef4444 !important;
-  color: #fff !important;
-  border: none !important;
+  background: linear-gradient(135deg, #ef4444, #fb7185) !important;
 }
 .fc-event:hover {
   transform: translateY(-2px);

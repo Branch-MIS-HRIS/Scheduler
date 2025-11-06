@@ -384,6 +384,41 @@ eventDidMount: function(info) {
     return;
   }
 
+  // 🔸 Generate gradient tints from a base hex color
+function getGradientFromBaseColor(hex, type = 'work') {
+  // Convert hex to HSL for gradient manipulation
+  const rgb = parseInt(hex.slice(1), 16);
+  const r = (rgb >> 16) & 255;
+  const g = (rgb >> 8) & 255;
+  const b = rgb & 255;
+  const hsl = rgbToHsl(r, g, b);
+  const [h, s, l] = hsl;
+
+  if (type === 'work') {
+    return `linear-gradient(135deg, hsl(${h}, ${s * 100}%, ${Math.max(25, l * 100 - 10)}%), hsl(${h}, ${s * 100}%, ${Math.min(70, l * 100 + 10)}%))`;
+  } else {
+    return `linear-gradient(135deg, hsl(${h}, ${s * 100}%, ${Math.min(90, l * 100 + 20)}%), hsl(${h}, ${s * 100}%, ${Math.min(95, l * 100 + 25)}%))`;
+  }
+}
+
+function rgbToHsl(r, g, b) {
+  r /= 255; g /= 255; b /= 255;
+  const max = Math.max(r, g, b), min = Math.min(r, g, b);
+  let h, s, l = (max + min) / 2;
+  if (max === min) { h = s = 0; }
+  else {
+    const d = max - min;
+    s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+    switch (max) {
+      case r: h = (g - b) / d + (g < b ? 6 : 0); break;
+      case g: h = (b - r) / d + 2; break;
+      case b: h = (r - g) / d + 4; break;
+    }
+    h /= 6;
+  }
+  return [Math.round(h * 360), s, l];
+}
+
 // --- Persistent Unique Employee Color Assignment (solid vs border) ---
 const baseColors = [
   '#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#14b8a6',
@@ -416,52 +451,58 @@ if (!employeeColors[empNo]) {
 const color = employeeColors[empNo];
 
 
-  if (type === 'work') {
-    // Use setProperty with 'important' to override stylesheet rules that use !important
-    try {
-      info.el.style.setProperty('background', color, 'important');
-      info.el.style.setProperty('background-image', 'none', 'important');
-      info.el.style.setProperty('color', '#fff', 'important');
-      info.el.style.setProperty('border', 'none', 'important');
-      // Also apply to inner event frame so the gradient from .fc-event-work can't show through
-      const inner = info.el.querySelector('.fc-event-main-frame') || info.el;
-      inner.style.setProperty('background', color, 'important');
-      inner.style.setProperty('background-image', 'none', 'important');
-      inner.style.setProperty('color', '#fff', 'important');
-    } catch (e) {
-      // Fallback if setProperty isn't supported for some reason
-      info.el.style.backgroundColor = color;
-      info.el.style.backgroundImage = 'none';
-      info.el.style.color = '#fff';
-      info.el.style.border = 'none';
-      const inner = info.el.querySelector('.fc-event-main-frame') || info.el;
-      inner.style.backgroundColor = color;
-      inner.style.backgroundImage = 'none';
-      inner.style.color = '#fff';
-    }
-  } else if (type === 'rest') {
-    try {
-      info.el.style.setProperty('background', '#fff', 'important');
-      info.el.style.setProperty('background-image', 'none', 'important');
-      info.el.style.setProperty('color', color, 'important');
-      info.el.style.setProperty('border', `2px solid ${color}`, 'important');
-      const inner = info.el.querySelector('.fc-event-main-frame') || info.el;
-      inner.style.setProperty('background', '#fff', 'important');
-      inner.style.setProperty('background-image', 'none', 'important');
-      inner.style.setProperty('color', color, 'important');
-      inner.style.setProperty('border', `2px solid ${color}`, 'important');
-    } catch (e) {
-      info.el.style.backgroundColor = '#fff';
-      info.el.style.backgroundImage = 'none';
-      info.el.style.border = `2px solid ${color}`;
-      info.el.style.color = color;
-      const inner = info.el.querySelector('.fc-event-main-frame') || info.el;
-      inner.style.backgroundColor = '#fff';
-      inner.style.backgroundImage = 'none';
-      inner.style.border = `2px solid ${color}`;
-      inner.style.color = color;
-    }
+if (type === 'work') {
+  // 🔸 Gradient-based background for Work type
+  try {
+    const grad = getGradientFromBaseColor(color, 'work');
+    info.el.style.setProperty('background', grad, 'important');
+    info.el.style.setProperty('background-image', 'none', 'important');
+    info.el.style.setProperty('color', '#fff', 'important');
+    info.el.style.setProperty('border', 'none', 'important');
+
+    const inner = info.el.querySelector('.fc-event-main-frame') || info.el;
+    inner.style.setProperty('background', grad, 'important');
+    inner.style.setProperty('background-image', 'none', 'important');
+    inner.style.setProperty('color', '#fff', 'important');
+  } catch (e) {
+    // Fallback flat color
+    info.el.style.backgroundColor = color;
+    info.el.style.backgroundImage = 'none';
+    info.el.style.color = '#fff';
+    info.el.style.border = 'none';
+    const inner = info.el.querySelector('.fc-event-main-frame') || info.el;
+    inner.style.backgroundColor = color;
+    inner.style.backgroundImage = 'none';
+    inner.style.color = '#fff';
   }
+} else if (type === 'rest') {
+  // 🔸 Gradient-based background for Rest type
+  try {
+    const grad = getGradientFromBaseColor(color, 'rest');
+    info.el.style.setProperty('background', grad, 'important');
+    info.el.style.setProperty('background-image', 'none', 'important');
+    info.el.style.setProperty('color', color, 'important');
+    info.el.style.setProperty('border', `2px solid ${color}`, 'important');
+
+    const inner = info.el.querySelector('.fc-event-main-frame') || info.el;
+    inner.style.setProperty('background', grad, 'important');
+    inner.style.setProperty('background-image', 'none', 'important');
+    inner.style.setProperty('color', color, 'important');
+    inner.style.setProperty('border', `2px solid ${color}`, 'important');
+  } catch (e) {
+    // Fallback flat color
+    info.el.style.backgroundColor = '#fff';
+    info.el.style.backgroundImage = 'none';
+    info.el.style.border = `2px solid ${color}`;
+    info.el.style.color = color;
+    const inner = info.el.querySelector('.fc-event-main-frame') || info.el;
+    inner.style.backgroundColor = '#fff';
+    inner.style.backgroundImage = 'none';
+    inner.style.border = `2px solid ${color}`;
+    inner.style.color = color;
+  }
+}
+
 
   try {
     tippy(info.el, {
@@ -537,29 +578,37 @@ const color = employeeColors[empNo];
                     try { draggable.destroy(); } catch (e) {}
                 }
 
-                try {
-                  draggable = new FullCalendar.Draggable(draggableCardsContainer, {
-                      itemSelector: '.fc-event-pill',
-                      eventData: function (eventEl) {
-                          if (eventEl._fcEventData) return eventEl._fcEventData;
-                          try {
-                              const parsed = JSON.parse(eventEl.getAttribute('data-event'));
-                              const t = parsed.extendedProps && parsed.extendedProps.type ? parsed.extendedProps.type : '';
-                              parsed.classNames = t === 'rest' ? ['fc-event-rest'] : ['fc-event-work'];
-                              // Do NOT set backgroundColor here — let eventDidMount apply per-employee colors.
-                              // parsed.backgroundColor = t === 'rest' ? '#ef4444' : '#2563eb';
-                              eventEl._fcEventData = parsed;
-                              return parsed;
-                          } catch (err) {
-                              console.error('Invalid event data on draggable element', err);
-                              return null;
-                          }
-                      }
-                  });
-                } catch (err) {
-                  console.warn('initializeDraggable error', err);
-                }
+try {
+  draggable = new FullCalendar.Draggable(draggableCardsContainer, {
+    itemSelector: '.fc-event-pill',
+    eventData: function (eventEl) {
+      if (eventEl._fcEventData) return eventEl._fcEventData;
+      try {
+        const parsed = JSON.parse(eventEl.getAttribute('data-event'));
+        const t = parsed.extendedProps && parsed.extendedProps.type ? parsed.extendedProps.type : '';
+        parsed.classNames = t === 'rest' ? ['fc-event-rest'] : ['fc-event-work'];
+        // Let CSS handle background color per type
+        eventEl._fcEventData = parsed;
+        return parsed;
+      } catch (err) {
+        console.error('Invalid event data on draggable element', err);
+        return null;
+      }
+    }
+  });
+} catch (err) {
+  console.warn('initializeDraggable error', err);
+}
+
+// ✅ Ensure drag alignment matches sidebar & calendar
+calendar.on('eventDragStart', function(info) {
+  info.el.style.transform = 'translateY(-4px)';
+});
+calendar.on('eventDragStop', function(info) {
+  info.el.style.transform = 'translateY(0)';
+});
             }
+
 
             
             // --- EMPLOYEE MANAGEMENT ---
@@ -739,13 +788,13 @@ Object.values(employees).forEach(emp => {
           <div
             class='fc-event-pill fc-event-work px-3 py-1 text-xs font-medium rounded-full'
             data-event='${JSON.stringify(workEventData)}'
-            style="background:${color}; color:#fff; border:none;">
+            style="background:${getGradientFromBaseColor(color, 'work')}; color:#fff; border:none;"
             🟦 Work
           </div>
           <div
             class='fc-event-pill fc-event-rest px-3 py-1 text-xs font-medium rounded-full'
             data-event='${JSON.stringify(restEventData)}'
-            style="background:#fff; color:${color}; border:2px solid ${color};">
+            style="background:${getGradientFromBaseColor(color, 'rest')}; color:${color}; border:2px solid ${color};"
             🔴 Rest
           </div>
         </div>
