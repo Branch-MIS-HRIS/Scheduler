@@ -777,30 +777,30 @@ Object.values(employees).forEach(emp => {
   const color = employeeColors[emp.empNo];
 
   // --- Draggable Card UI ---
-  const cardHtml = `
-    <div class="p-3 bg-white rounded-lg shadow-sm border border-gray-200" data-empno="${emp.empNo}">
-      <div class="flex items-center justify-between">
-        <div>
-          <div class="font-medium text-gray-800">${emp.name}</div>
-          <div class="text-xs text-gray-500">${emp.position}</div>
+const cardHtml = `
+  <div class="p-3 bg-white rounded-lg shadow-sm border border-gray-200" data-empno="${emp.empNo}">
+    <div class="flex items-center justify-between">
+      <div>
+        <div class="font-medium text-gray-800">${emp.name}</div>
+        <div class="text-xs text-gray-500">${emp.position}</div>
+      </div>
+      <div class="flex space-x-2">
+        <div
+          class="fc-event-pill fc-event-work px-3 py-1 text-xs font-medium rounded-full cursor-pointer select-none shadow-sm"
+          data-event='${JSON.stringify(workEventData)}'
+          style="background:${getGradientFromBaseColor(color, 'work')}; color:#fff; border:none;">
+          🟦 Work
         </div>
-        <div class="flex space-x-2">
-          <div
-            class='fc-event-pill fc-event-work px-3 py-1 text-xs font-medium rounded-full'
-            data-event='${JSON.stringify(workEventData)}'
-            style="background:${getGradientFromBaseColor(color, 'work')}; color:#fff; border:none;"
-            🟦 Work
-          </div>
-          <div
-            class='fc-event-pill fc-event-rest px-3 py-1 text-xs font-medium rounded-full'
-            data-event='${JSON.stringify(restEventData)}'
-            style="background:${getGradientFromBaseColor(color, 'rest')}; color:${color}; border:2px solid ${color};"
-            🔴 Rest
-          </div>
+        <div
+          class="fc-event-pill fc-event-rest px-3 py-1 text-xs font-medium rounded-full cursor-pointer select-none shadow-sm"
+          data-event='${JSON.stringify(restEventData)}'
+          style="background:${getGradientFromBaseColor(color, 'rest')}; color:${color}; border:2px solid ${color};">
+          🔴 Rest
         </div>
       </div>
     </div>
-  `;
+  </div>
+`;
   if (draggableCardsContainer) draggableCardsContainer.innerHTML += cardHtml;
 });
                 
