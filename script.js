@@ -377,6 +377,13 @@ eventDidMount: function(info) {
   const { type, shiftCode, isConflict, empNo } = info.event.extendedProps;
   const emp = employees[empNo];
 
+  // Guard: if empNo is missing, avoid creating/assigning colors and hide the event early
+  if (!empNo) {
+    console.warn('eventDidMount: missing empNo for event', info.event && info.event.id);
+    info.el.style.display = 'none';
+    return;
+  }
+
 // --- Persistent Unique Employee Color Assignment (solid vs border) ---
 const baseColors = [
   '#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#14b8a6',
@@ -539,9 +546,8 @@ const color = employeeColors[empNo];
                               const parsed = JSON.parse(eventEl.getAttribute('data-event'));
                               const t = parsed.extendedProps && parsed.extendedProps.type ? parsed.extendedProps.type : '';
                               parsed.classNames = t === 'rest' ? ['fc-event-rest'] : ['fc-event-work'];
--                              parsed.backgroundColor = t === 'rest' ? '#ef4444' : '#2563eb';
-+                              // Do NOT set backgroundColor here — let eventDidMount apply per-employee colors.
-+                              // parsed.backgroundColor = t === 'rest' ? '#ef4444' : '#2563eb';
+                              // Do NOT set backgroundColor here — let eventDidMount apply per-employee colors.
+                              // parsed.backgroundColor = t === 'rest' ? '#ef4444' : '#2563eb';
                               eventEl._fcEventData = parsed;
                               return parsed;
                           } catch (err) {
@@ -682,7 +688,7 @@ const color = employeeColors[empNo];
                 }
 
                 // --- Generate Cards ---
-                Object.values(employees).forEach emp => {
+                Object.values(employees).forEach(emp => {
                     const workEventData = {
                         title: emp.name,
                         extendedProps: {
