@@ -8,6 +8,7 @@ document.addEventListener('DOMContentLoaded', function () {
             // --- COPY / PASTE SUPPORT ---
 let copiedEmployeeSchedule = null;
 let copiedEmployeeNo = null;
+let copiedEmployeeData = null; // previously undeclared
             
             // FullCalendar instances
             let calendar;
@@ -172,7 +173,7 @@ const shiftTimes = {
   "WHSE-012": "9:00AM - 1:00PM"
 };
 
-const shiftSelect = new TomSelect("#shift-preset", {
+const shiftSelect = (typeof TomSelect !== 'undefined' && document.querySelector("#shift-preset")) ? new TomSelect("#shift-preset", {
   create: false,
   sortField: { field: "text", direction: "asc" },
   placeholder: "Search or select shift code...",
@@ -189,14 +190,15 @@ const shiftSelect = new TomSelect("#shift-preset", {
       return `<div>${escape(code)} ${time ? `(${escape(time)})` : ""}</div>`;
     }
   }
-});
+}) : null;
 
 // Keep only the code value when saving/exporting
-shiftSelect.on('change', function (value) {
-  const cleanCode = value.split(' ')[0];
-  shiftPresetSelect.value = cleanCode;
-});
-
+if (shiftSelect) {
+  shiftSelect.on('change', function (value) {
+    const cleanCode = value.split(' ')[0];
+    if (shiftPresetSelect) shiftPresetSelect.value = cleanCode;
+  });
+}
 
             // Stats Bar
             const statsWork = document.getElementById('stats-work');
@@ -216,60 +218,68 @@ shiftSelect.on('change', function (value) {
             // --- LOCAL STORAGE SAVE / LOAD ---
 
 function saveToLocalStorage() {
-  const allEvents = calendar.getEvents().map(e => ({
-    title: e.title,
-    start: e.startStr,
-    extendedProps: e.extendedProps
-  }));
-  localStorage.setItem('employees', JSON.stringify(employees));
-  localStorage.setItem('events', JSON.stringify(allEvents));
+  try {
+    const allEvents = calendar ? calendar.getEvents().map(e => ({
+      title: e.title,
+      start: e.startStr,
+      extendedProps: e.extendedProps
+    })) : [];
+    localStorage.setItem('employees', JSON.stringify(employees));
+    localStorage.setItem('events', JSON.stringify(allEvents));
+  } catch (err) {
+    console.warn('saveToLocalStorage error', err);
+  }
 }
 
 function loadFromLocalStorage() {
-  const storedEmployees = JSON.parse(localStorage.getItem('employees'));
-  const storedEvents = JSON.parse(localStorage.getItem('events'));
-
-  if (storedEmployees && Object.keys(storedEmployees).length > 0) {
-    employees = storedEmployees;
-    draggableCardsContainer.innerHTML = '';
-    Object.values(employees).forEach(emp => {
-      const workEventData = {
-        title: emp.name,
-        extendedProps: { type: 'work', empNo: emp.empNo, position: emp.position }
-      };
-      const restEventData = {
-        title: emp.name,
-        extendedProps: { type: 'rest', empNo: emp.empNo, position: emp.position }
-      };
-      const cardHtml = `
-        <div class="p-3 bg-white rounded-lg shadow-sm border border-gray-200">
-          <div class="flex items-center justify-between">
-            <div>
-              <div class="font-medium text-gray-800">${emp.name}</div>
-              <div class="text-xs text-gray-500">${emp.position}</div>
+  try {
+    const storedEmployees = JSON.parse(localStorage.getItem('employees'));
+    const storedEvents = JSON.parse(localStorage.getItem('events'));
+  
+    if (storedEmployees && Object.keys(storedEmployees).length > 0) {
+      employees = storedEmployees;
+      if (draggableCardsContainer) draggableCardsContainer.innerHTML = '';
+      Object.values(employees).forEach(emp => {
+        const workEventData = {
+          title: emp.name,
+          extendedProps: { type: 'work', empNo: emp.empNo || emp.empNo, position: emp.position }
+        };
+        const restEventData = {
+          title: emp.name,
+          extendedProps: { type: 'rest', empNo: emp.empNo || emp.empNo, position: emp.position }
+        };
+        const cardHtml = `
+          <div class="p-3 bg-white rounded-lg shadow-sm border border-gray-200" data-empno="${emp.empNo}">
+            <div class="flex items-center justify-between">
+              <div>
+                <div class="font-medium text-gray-800">${emp.name}</div>
+                <div class="text-xs text-gray-500">${emp.position}</div>
+              </div>
+              <div class="flex space-x-2">
+                <div class='fc-event-pill fc-event-work px-3 py-1 text-xs font-medium rounded-full' data-event='${JSON.stringify(workEventData)}'>🟦 Work</div>
+                <div class='fc-event-pill fc-event-rest px-3 py-1 text-xs font-medium rounded-full' data-event='${JSON.stringify(restEventData)}'>🔴 Rest</div>
+              </div>
             </div>
-            <div class="flex space-x-2">
-              <div class='fc-event-pill fc-event-work px-3 py-1 text-xs font-medium rounded-full' data-event='${JSON.stringify(workEventData)}'>🟦 Work</div>
-              <div class='fc-event-pill fc-event-rest px-3 py-1 text-xs font-medium rounded-full' data-event='${JSON.stringify(restEventData)}'>🔴 Rest</div>
-            </div>
-          </div>
-        </div>`;
-      draggableCardsContainer.innerHTML += cardHtml;
-    });
-    draggablePlaceholder.classList.add('hidden');
-    initializeDraggable();
-  }
-
-  if (storedEvents && storedEvents.length > 0) {
-    storedEvents.forEach(ev => {
-      calendar.addEvent({
-        title: ev.title,
-        start: ev.start,
-        extendedProps: ev.extendedProps
+          </div>`;
+        if (draggableCardsContainer) draggableCardsContainer.innerHTML += cardHtml;
       });
-    });
-    runConflictDetection();
-    updateStats();
+      if (draggablePlaceholder) draggablePlaceholder.classList.add('hidden');
+      initializeDraggable();
+    }
+  
+    if (storedEvents && storedEvents.length > 0 && calendar) {
+      storedEvents.forEach(ev => {
+        calendar.addEvent({
+          title: ev.title,
+          start: ev.start,
+          extendedProps: ev.extendedProps
+        });
+      });
+      runConflictDetection();
+      updateStats();
+    }
+  } catch (err) {
+    console.warn('loadFromLocalStorage error', err);
   }
 }
             
@@ -277,22 +287,19 @@ function loadFromLocalStorage() {
              * Initializes the FullCalendar instance
              */
             function initializeCalendar() {
+                if (!calendarEl) return;
                 calendar = new FullCalendar.Calendar(calendarEl, {
-                    // Plugins are included in the global FullCalendar bundle (index.global.min.js),
-                    // so the explicit plugins array is not needed and can cause errors if those
-                    // properties are undefined.
-                    // (Removed plugins: [FullCalendar.dayGridPlugin, FullCalendar.interactionPlugin])
                     initialView: 'dayGridMonth',
                     headerToolbar: {
                         left: 'prev,next today',
                         center: 'title',
                         right: 'dayGridMonth'
                     },
-                    editable: true,       // Allows dragging events on calendar
-                    droppable: true,      // Allows dropping external items
+                    editable: true,
+                    droppable: true,
                     slotEventOverlap: false,
                     eventOrder: 'title',
-                    dayMaxEvents: 4,      // Show '+ more' link
+                    dayMaxEvents: 4,
                     weekends: true,
                     
                     // --- Event Handlers ---
@@ -305,31 +312,30 @@ function loadFromLocalStorage() {
                         const { type, empNo, position } = newEvent.extendedProps;
                         const dateStr = newEvent.startStr;
                         
-                        // 1. Assign a unique ID for tracking
-                        newEvent.setExtendedProp('id', crypto.randomUUID());
+                        try {
+                          newEvent.setExtendedProp('id', (crypto && crypto.randomUUID) ? crypto.randomUUID() : Date.now().toString());
+                        } catch (e) {
+                          newEvent.setExtendedProp('id', Date.now().toString());
+                        }
 
-                        // 2. Duplicate Protection
                         const allEvents = calendar.getEvents();
                         const isDuplicate = allEvents.find(e => 
-                            e.extendedProps.id !== newEvent.extendedProps.id && // Not itself
+                            e.extendedProps.id !== newEvent.extendedProps.id &&
                             e.startStr === dateStr &&
                             e.extendedProps.empNo === empNo &&
                             e.extendedProps.type === type
                         );
 
                         if (isDuplicate) {
-                            showToast(`Duplicate entry blocked: ${employees[empNo].name} already has a '${type}' day on this date.`, 'error');
+                            showToast(`Duplicate entry blocked: ${employees[empNo] ? employees[empNo].name : empNo} already has a '${type}' day on this date.`, 'error');
                             newEvent.remove();
                             return;
                         }
 
-                        // 3. Handle based on type
                         if (type === 'work') {
-                            // Store the event and open the shift modal
                             currentDroppingEvent = newEvent;
                             openShiftModal();
                         } else {
-                            // It's a 'Rest' day, just apply style and run checks
                             newEvent.setProp('classNames', ['fc-event-rest']);
                             runConflictDetection();
                             updateStats();
@@ -341,9 +347,8 @@ function loadFromLocalStorage() {
                      * Fired when an event is dragged and dropped *within* the calendar.
                      */
                     eventDrop: function(info) {
-                        // Re-run checks on drop
                         runConflictDetection();
-                        updateStats(); // Stats don't change, but good practice
+                        updateStats();
                         saveToLocalStorage();
                     },
                     
@@ -351,7 +356,6 @@ function loadFromLocalStorage() {
                      * Fired when an event is removed.
                      */
                     eventRemove: function(info) {
-                        // Re-run checks after removal
                         runConflictDetection();
                         updateStats();
                         saveToLocalStorage();
@@ -371,40 +375,35 @@ function loadFromLocalStorage() {
                         const { type, shiftCode, isConflict, empNo } = info.event.extendedProps;
                         const emp = employees[empNo];
 
-            tippy(info.el, {
-  content: `
-    <div class='text-sm'>
-      <div><strong>Employee #:</strong> ${emp.empNo}</div>
-      <div><strong>Position:</strong> ${emp.position}</div>
-      <div><strong>Shift:</strong> ${type === 'work' ? 'Work' : 'Rest'}</div>
-    </div>
-  `,
-  allowHTML: true,
-  theme: 'light-border',
-  placement: 'top',
-});
-                        
-                        // --- ADDED GUARD CLAUSE ---
-                        // If employee data doesn't exist (e.g., deleted or not loaded),
-                        // log an error and safely hide the event instead of crashing.
+                        try {
+                          tippy(info.el, {
+                            content: `
+                              <div class='text-sm'>
+                                <div><strong>Employee #:</strong> ${emp ? emp.empNo : empNo}</div>
+                                <div><strong>Position:</strong> ${emp ? emp.position : 'N/A'}</div>
+                                <div><strong>Shift:</strong> ${type === 'work' ? 'Work' : 'Rest'}</div>
+                              </div>
+                            `,
+                            allowHTML: true,
+                            theme: 'light-border',
+                            placement: 'top',
+                          });
+                        } catch (e) {}
+
                         if (!emp) {
                             console.error(`Event ${info.event.id || ''} has invalid employee data (empNo: ${empNo}). Hiding event.`);
-                            info.el.style.display = 'none'; // Hide the broken event
-                            return; // Stop processing this event
+                            info.el.style.display = 'none';
+                            return;
                         }
-                        // --- END GUARD CLAUSE ---
                         
-                        // Apply custom class based on type
                         info.el.classList.add(type === 'work' ? 'fc-event-work' : 'fc-event-rest');
                         
-                        // Apply conflict class
                         if (isConflict) {
                             info.el.classList.add('fc-event-conflict');
                         } else {
                             info.el.classList.remove('fc-event-conflict');
                         }
 
-                        // Set tooltip
                         const shiftInfo = shiftCode ? ` (${shiftCode})` : '';
                         const title = `${info.event.title} (${emp.position})\nType: ${type.charAt(0).toUpperCase() + type.slice(1)}${shiftInfo}`;
                         info.el.title = title;
@@ -432,7 +431,7 @@ function loadFromLocalStorage() {
                      */
                     dayCellClassNames: function(arg) {
                         if (arg.date.getDay() === 0 || arg.date.getDay() === 6) {
-                            return 'fc-day-sat-sun'; // Custom class, styled in <style>
+                            return 'fc-day-sat-sun';
                         }
                         return null;
                     }
@@ -444,84 +443,33 @@ function loadFromLocalStorage() {
             /**
              * Initializes the Draggable instance for the sidebar cards.
              */
-            
-            
             function initializeDraggable() {
+                if (!draggableCardsContainer) return;
                 if (draggable) {
                     try { draggable.destroy(); } catch (e) {}
                 }
 
-                const containerEl = document.getElementById('draggable-cards-container');
-                draggable = new FullCalendar.Draggable(containerEl, {
-                    itemSelector: '.fc-event-pill',
-                    eventData: function (eventEl) {
-                        if (eventEl._fcEventData) return eventEl._fcEventData;
-                        try {
-                            const parsed = JSON.parse(eventEl.getAttribute('data-event'));
-                            const t = parsed.extendedProps?.type || '';
-                            if (t === 'rest') {
-                                parsed.classNames = ['fc-event-rest'];
-                                parsed.backgroundColor = '#ef4444';
-                                parsed.borderColor = '#ef4444';
-                                parsed.textColor = '#ffffff';
-                            } else {
-                                parsed.classNames = ['fc-event-work'];
-                                parsed.backgroundColor = '#2563eb';
-                                parsed.borderColor = '#2563eb';
-                                parsed.textColor = '#ffffff';
-                            }
-                            eventEl._fcEventData = parsed;
-                            return parsed;
-                        } catch (err) {
-                            console.error('Invalid event data', err);
-                            return null;
-                        }
-                    }
-                });
-            }
-
-
-                const containerEl = document.getElementById('draggable-cards-container');
-                draggable = new FullCalendar.Draggable(containerEl, {
-                    itemSelector: '.fc-event-pill',
-                    eventData: function (eventEl) {
-                        // Cache parsed event data on the element to avoid repeated JSON.parse calls
-                        if (eventEl._fcEventData) return eventEl._fcEventData;
-                        try {
-                            const parsed = JSON.parse(eventEl.getAttribute('data-event'));
-                            // ensure classNames mirror the type so the drag preview shows correct color
-                            const t = parsed.extendedProps && parsed.extendedProps.type ? parsed.extendedProps.type : '';
-                            parsed.classNames = t === 'rest' ? ['fc-event-rest'] : ['fc-event-work'];
-                            // also include a lightweight style hint for the mirror element
-                            parsed.backgroundColor = t === 'rest' ? '#ef4444' : '#2563eb';
-                            // store back
-                            eventEl._fcEventData = parsed;
-                            return parsed;
-                        } catch (err) {
-                            console.error('Invalid event data on draggable element', err);
-                            return null;
-                        }
-                    }
-                });
-            }
-
-
-                const containerEl = document.getElementById('draggable-cards-container');
-                draggable = new FullCalendar.Draggable(containerEl, {
-                    itemSelector: '.fc-event-pill',
-                    eventData: function (eventEl) {
-                        // Cache parsed event data on the element to avoid repeated JSON.parse calls
-                        if (eventEl._fcEventData) return eventEl._fcEventData;
-                        try {
-                            const parsed = JSON.parse(eventEl.getAttribute('data-event'));
-                            eventEl._fcEventData = parsed;
-                            return parsed;
-                        } catch (err) {
-                            console.error('Invalid event data on draggable element', err);
-                            return null;
-                        }
-                    }
-                });
+                try {
+                  draggable = new FullCalendar.Draggable(draggableCardsContainer, {
+                      itemSelector: '.fc-event-pill',
+                      eventData: function (eventEl) {
+                          if (eventEl._fcEventData) return eventEl._fcEventData;
+                          try {
+                              const parsed = JSON.parse(eventEl.getAttribute('data-event'));
+                              const t = parsed.extendedProps && parsed.extendedProps.type ? parsed.extendedProps.type : '';
+                              parsed.classNames = t === 'rest' ? ['fc-event-rest'] : ['fc-event-work'];
+                              parsed.backgroundColor = t === 'rest' ? '#ef4444' : '#2563eb';
+                              eventEl._fcEventData = parsed;
+                              return parsed;
+                          } catch (err) {
+                              console.error('Invalid event data on draggable element', err);
+                              return null;
+                          }
+                      }
+                  });
+                } catch (err) {
+                  console.warn('initializeDraggable error', err);
+                }
             }
 
             
@@ -531,6 +479,11 @@ function loadFromLocalStorage() {
              * Creates and appends a new blank employee row to the table.
              */
             function addEmployeeRow() {
+                if (!employeeTableBody) {
+                    console.warn('employee-table-body not found in DOM.');
+                    return;
+                }
+
                 const tr = document.createElement('tr');
                 tr.className = 'align-top';
                 
@@ -565,8 +518,10 @@ function loadFromLocalStorage() {
              * Removes an employee row when its 'x' button is clicked.
              */
             function removeEmployeeRow(buttonEl) {
+                if (!employeeTableBody) return;
                 if (employeeTableBody.rows.length > 1) {
-                    buttonEl.closest('tr').remove();
+                    const tr = buttonEl.closest('tr');
+                    if (tr) tr.remove();
                 } else {
                     showToast('At least one employee row is required.', 'warn');
                 }
@@ -579,29 +534,28 @@ function loadFromLocalStorage() {
                 employees = {};
                 let isValid = true;
                 
-                // Clear previous state
-                draggableCardsContainer.innerHTML = '';
-                document.querySelectorAll('#employee-table-body input, #employee-table-body select').forEach(el => el.classList.remove('validation-error'));
+                if (draggableCardsContainer) draggableCardsContainer.innerHTML = '';
+                if (employeeTableBody) {
+                  document.querySelectorAll('#employee-table-body input, #employee-table-body select').forEach(el => el.classList.remove('validation-error'));
+                }
 
-                const rows = employeeTableBody.querySelectorAll('tr');
+                const rows = employeeTableBody ? employeeTableBody.querySelectorAll('tr') : [];
 
                 rows.forEach(row => {
                     const nameInput = row.querySelector('.emp-name');
                     const noInput = row.querySelector('.emp-no');
                     const posInput = row.querySelector('.emp-pos');
                     
-                    const name = nameInput.value.trim();
-                    const empNo = noInput.value.trim();
-                    const position = posInput.value;
+                    const name = nameInput ? nameInput.value.trim() : '';
+                    const empNo = noInput ? noInput.value.trim() : '';
+                    const position = posInput ? posInput.value : '';
 
-                    // Validation 1: Required fields
-                    if (!name) { nameInput.classList.add('validation-error'); isValid = false; }
-                    if (!empNo) { noInput.classList.add('validation-error'); isValid = false; }
-                    if (!position) { posInput.classList.add('validation-error'); isValid = false; }
+                    if (!name && nameInput) { nameInput.classList.add('validation-error'); isValid = false; }
+                    if (!empNo && noInput) { noInput.classList.add('validation-error'); isValid = false; }
+                    if (!position && posInput) { posInput.classList.add('validation-error'); isValid = false; }
                     
-                    // Validation 2: Duplicate Employee No
                     if (empNo && employees[empNo]) {
-                        noInput.classList.add('validation-error');
+                        if (noInput) noInput.classList.add('validation-error');
                         isValid = false;
                         showToast(`Duplicate Employee No: ${empNo}. Please use unique numbers.`, 'error');
                     }
@@ -623,7 +577,6 @@ function loadFromLocalStorage() {
 
                 // --- Generate Cards ---
                 Object.values(employees).forEach(emp => {
-                    // Event data for the 'Work' pill
                     const workEventData = {
                         title: emp.name,
                         extendedProps: {
@@ -633,7 +586,6 @@ function loadFromLocalStorage() {
                         }
                     };
                     
-                    // Event data for the 'Rest' pill
                     const restEventData = {
                         title: emp.name,
                         extendedProps: {
@@ -644,7 +596,7 @@ function loadFromLocalStorage() {
                     };
 
                     const cardHtml = `
-                        <div class="p-3 bg-white rounded-lg shadow-sm border border-gray-200">
+                        <div class="p-3 bg-white rounded-lg shadow-sm border border-gray-200" data-empno="${emp.empNo}">
                             <div class="flex items-center justify-between">
                                 <div>
                                     <div class="font-medium text-gray-800">${emp.name}</div>
@@ -661,21 +613,20 @@ function loadFromLocalStorage() {
                             </div>
                         </div>
                     `;
-                    draggableCardsContainer.innerHTML += cardHtml;
+                    if (draggableCardsContainer) draggableCardsContainer.innerHTML += cardHtml;
                 });
                 
-                draggablePlaceholder.classList.add('hidden');
+                if (draggablePlaceholder) draggablePlaceholder.classList.add('hidden');
                 
-                // Re-initialize the draggable functionality
                 initializeDraggable();
                 
                 updateStats();
                 showToast('Employees saved and cards generated. You can now drag schedules.', 'success');
-                saveToLocalStorage(); // already there, good
+                saveToLocalStorage();
 
-// Add data-empno for copy/paste
 document.querySelectorAll('#draggable-cards-container > div').forEach(card => {
-  const name = card.querySelector('.font-medium').textContent.trim();
+  const nameEl = card.querySelector('.font-medium');
+  const name = nameEl ? nameEl.textContent.trim() : '';
   const emp = Object.values(employees).find(e => e.name === name);
   if (emp) card.dataset.empno = emp.empNo;
 });
@@ -684,41 +635,32 @@ document.querySelectorAll('#draggable-cards-container > div').forEach(card => {
             
             // --- MODAL & UI LOGIC ---
 
-            /**
-             * Opens the Shift Code modal and resets its form.
-             */
+            function openShiftModal() {
+                if (!shiftModal) return;
+                if (shiftPresetSelect) shiftPresetSelect.value = '';
+                if (shiftCustomInput) shiftCustomInput.value = '';
 
-function openShiftModal() {
-    // Reset form
-    shiftPresetSelect.value = '';
-    shiftCustomInput.value = '';
+                if (shiftPresetSelect && shiftPresetSelect.options.length <= 1) {
+                    shiftPresets.forEach(code => {
+                        const option = new Option(code, code);
+                        shiftPresetSelect.add(option);
+                    });
+                }
 
-    // Populate presets (if not already done)
-    if (shiftPresetSelect.options.length <= 1) {
-        shiftPresets.forEach(code => {
-            const option = new Option(code, code);
-            shiftPresetSelect.add(option);
-        });
-    }
+                if (window.lastUsedShiftCode && shiftSelect) {
+                    shiftSelect.setValue(window.lastUsedShiftCode);
+                }
 
-    // ✅ Auto-select last used shift code
-    if (window.lastUsedShiftCode) {
-        shiftSelect.setValue(window.lastUsedShiftCode);
-    }
+                shiftModal.classList.remove('hidden');
 
-    // Show modal
-    shiftModal.classList.remove('hidden');
-
-    // === Auto-focus the dropdown search input ===
-    setTimeout(() => {
-        const tomInput = document.querySelector('.ts-dropdown .ts-input input, .ts-control input');
-        if (tomInput) tomInput.focus();
-    }, 200);
-}
+                setTimeout(() => {
+                    const tomInput = document.querySelector('.ts-dropdown .ts-input input, .ts-control input');
+                    if (tomInput) tomInput.focus();
+                }, 200);
+            }
 
 
             // === Shift Search Filter ===
-// === Shift Search Filter ===
 const shiftSearchInput = document.getElementById('shift-search');
 
 if (shiftSearchInput && shiftPresetSelect) {
@@ -731,129 +673,105 @@ if (shiftSearchInput && shiftPresetSelect) {
   });
 }
             
-            /**
-             * Saves the shift code from the modal to the event.
-             */
-// === Allow reusing last chosen shift ===
-function handleSaveShift() {
-  // Read TomSelect value first
-  let preset = '';
-  try {
-    preset = shiftSelect.getValue() || shiftPresetSelect.value;
-  } catch (e) {
-    preset = shiftPresetSelect.value;
-  }
+            function handleSaveShift() {
+              let preset = '';
+              try {
+                preset = shiftSelect ? (shiftSelect.getValue() || shiftPresetSelect.value) : (shiftPresetSelect ? shiftPresetSelect.value : '');
+              } catch (e) {
+                preset = shiftPresetSelect ? shiftPresetSelect.value : '';
+              }
+            
+              const custom = shiftCustomInput ? shiftCustomInput.value.trim() : '';
+            
+              if (!preset && !custom && window.lastUsedShiftCode) {
+                preset = window.lastUsedShiftCode;
+              }
+            
+              const shiftCode = custom || preset;
+            
+              if (!shiftCode) {
+                showToast('Please select a preset or enter a custom shift code.', 'warn');
+                return;
+              }
+            
+              window.lastUsedShiftCode = shiftCode;
+            
+              const cleanCode = String(shiftCode).split(' ')[0];
+              if (currentDroppingEvent) {
+                currentDroppingEvent.setExtendedProp('shiftCode', cleanCode);
+                currentDroppingEvent.setProp('classNames', ['fc-event-work']);
+                runConflictDetection();
+                updateStats();
+                saveToLocalStorage();
+              }
+            
+              if (shiftModal) closeModal(shiftModal);
+              currentDroppingEvent = null;
+            }
 
-  const custom = shiftCustomInput.value.trim();
-
-  // ✅ NEW: Use last saved shift if nothing is selected
-  if (!preset && !custom && window.lastUsedShiftCode) {
-    preset = window.lastUsedShiftCode;
-  }
-
-  const shiftCode = custom || preset;
-
-  if (!shiftCode) {
-    showToast('Please select a preset or enter a custom shift code.', 'warn');
-    return;
-  }
-
-  // Always remember the last used shift code
-  window.lastUsedShiftCode = shiftCode;
-
-  const cleanCode = String(shiftCode).split(' ')[0]; // remove any time display
-  if (currentDroppingEvent) {
-    currentDroppingEvent.setExtendedProp('shiftCode', cleanCode);
-    currentDroppingEvent.setProp('classNames', ['fc-event-work']);
-    runConflictDetection();
-    updateStats();
-    saveToLocalStorage();
-  }
-
-  closeModal(shiftModal);
-  currentDroppingEvent = null;
-}
-
-            /**
-             * Opens the Delete Confirmation modal.
-             */
             function openDeleteModal(event) {
+                if (!deleteModal || !deleteModalSummary) return;
                 currentDeletingEvent = event;
                 const { type } = event.extendedProps;
                 deleteModalSummary.textContent = `${event.title} - ${type.toUpperCase()} on ${event.start.toLocaleDateString()}`;
                 deleteModal.classList.remove('hidden');
             }
 
-            /**
-             * Handles the confirmed deletion of an event.
-             */
             function handleConfirmDelete() {
                 if (currentDeletingEvent) {
                     currentDeletingEvent.remove();
                     showToast('Schedule entry removed.', 'info');
                     saveToLocalStorage();
                 }
-                closeModal(deleteModal);
+                if (deleteModal) closeModal(deleteModal);
                 currentDeletingEvent = null;
             }
             
-            /**
-             * Opens the Export Summary modal.
-             */
             function openExportModal() {
-                // Get fresh data
+                if (!exportModal || !calendar) return;
                 const conflicts = getConflicts();
                 const allEvents = calendar.getEvents();
                 
                 const workCount = allEvents.filter(e => e.extendedProps.type === 'work').length;
                 const restCount = allEvents.filter(e => e.extendedProps.type === 'rest').length;
 
-                // Update modal stats
-                exportWorkCount.textContent = workCount;
-                exportRestCount.textContent = restCount;
+                if (exportWorkCount) exportWorkCount.textContent = workCount;
+                if (exportRestCount) exportRestCount.textContent = restCount;
 
-                if (conflicts.length > 0) {
-                    exportConflictCount.textContent = conflicts.length;
-                    exportConflictWarning.classList.remove('hidden');
-                } else {
-                    exportConflictWarning.classList.add('hidden');
+                if (exportConflictWarning && exportConflictCount) {
+                    if (conflicts.length > 0) {
+                        exportConflictCount.textContent = conflicts.length;
+                        exportConflictWarning.classList.remove('hidden');
+                    } else {
+                        exportConflictWarning.classList.add('hidden');
+                    }
                 }
                 
                 exportModal.classList.remove('hidden');
             }
 
-            /**
-             * Generic function to close any modal.
-             */
             function closeModal(modalEl) {
+                if (!modalEl) return;
                 modalEl.classList.add('hidden');
             }
 
-            /**
-             * Handles closing a modal, especially for 'Cancel' on new drops.
-             */
             function handleCloseModal(modalId) {
                 const modalEl = document.getElementById(modalId);
                 closeModal(modalEl);
 
-                // If canceling the SHIFT modal for a NEW drop, remove the event
                 if (modalId === 'shift-modal' && currentDroppingEvent) {
                     currentDroppingEvent.remove();
                     showToast('Schedule add canceled.', 'info');
                     currentDroppingEvent = null;
                 }
                 
-                // If canceling the DELETE modal
                 if (modalId === 'delete-modal') {
                     currentDeletingEvent = null;
                 }
             }
 
-            /**
-             * Displays a toast notification.
-             */
             function showToast(message, type = 'info') {
-                const container = document.getElementById('toast-container');
+                const container = document.getElementById('toast-container') || document.body;
                 const toast = document.createElement('div');
                 
                 let bgColor, textColor, borderColor;
@@ -867,7 +785,7 @@ function handleSaveShift() {
                     case 'warn':
                         bgColor = 'bg-yellow-50'; textColor = 'text-yellow-800'; borderColor = 'border-yellow-200';
                         break;
-                    default: // info
+                    default:
                         bgColor = 'bg-blue-50'; textColor = 'text-blue-800'; borderColor = 'border-blue-200';
                 }
                 
@@ -876,24 +794,19 @@ function handleSaveShift() {
                 
                 container.appendChild(toast);
                 
-                // Trigger transition
                 setTimeout(() => toast.classList.add('show'), 10);
                 
-                // Remove after 4 seconds
                 setTimeout(() => {
                     toast.classList.remove('show');
-                    setTimeout(() => toast.remove(), 500); // Wait for fade out
+                    setTimeout(() => toast.remove(), 500);
                 }, 4000);
             }
             
             
             // --- CONFLICT DETECTION ---
 
-            /**
-             * Gathers all events and groups them by date and by employee.
-             */
             function getGroupedEvents() {
-                const allEvents = calendar.getEvents();
+                const allEvents = calendar ? calendar.getEvents() : [];
                 const eventsByDate = {};
                 const eventsByEmp = {};
 
@@ -901,11 +814,9 @@ function handleSaveShift() {
                     const dateStr = event.startStr;
                     const { empNo } = event.extendedProps;
                     
-                    // Group by Date
                     if (!eventsByDate[dateStr]) eventsByDate[dateStr] = [];
                     eventsByDate[dateStr].push(event);
                     
-                    // Group by Employee
                     if (!eventsByEmp[empNo]) eventsByEmp[empNo] = [];
                     eventsByEmp[empNo].push(event);
                 });
@@ -913,14 +824,10 @@ function handleSaveShift() {
                 return { allEvents, eventsByDate, eventsByEmp };
             }
 
-            /**
-             * Runs all conflict checks and returns a list of conflicts.
-             */
             function getConflicts() {
                 const { eventsByDate, eventsByEmp } = getGroupedEvents();
                 let conflicts = [];
 
-                // --- Rule 1: Work + Rest Same Day ---
                 for (const date in eventsByDate) {
                     const dailyEvents = eventsByDate[date];
                     const empEventsOnDate = {};
@@ -950,7 +857,6 @@ function handleSaveShift() {
                     }
                 }
 
-                // --- Rule 2: Manager Rest Conflict (>1 manager resting) ---
                 for (const date in eventsByDate) {
                     const managerRestEvents = eventsByDate[date].filter(event => {
                         const emp = employees[event.extendedProps.empNo];
@@ -971,10 +877,9 @@ function handleSaveShift() {
                     }
                 }
                 
-                // --- Rule 3: Weekend Rest Limit (>2) ---
                 for (const empNo in eventsByEmp) {
                     const weekendRestEvents = eventsByEmp[empNo].filter(event => {
-                        const day = event.start.getDay(); // 0 = Sun, 6 = Sat
+                        const day = event.start.getDay();
                         return event.extendedProps.type === 'rest' && (day === 0 || day === 6);
                     });
 
@@ -993,21 +898,18 @@ function handleSaveShift() {
                 return conflicts;
             }
             
-            /**
-             * Main function to find conflicts and update the UI.
-             */
             function runConflictDetection() {
                 const { allEvents } = getGroupedEvents();
                 
-                // 1. Clear all previous conflict states
-                allEvents.forEach(event => event.setExtendedProp('isConflict', false));
-                conflictTableBody.innerHTML = '';
+                if (allEvents && allEvents.forEach) {
+                  allEvents.forEach(event => event.setExtendedProp('isConflict', false));
+                }
+                if (conflictTableBody) conflictTableBody.innerHTML = '';
                 
                 const conflicts = getConflicts();
                 const conflictEvents = new Set();
-                const conflictTableEntries = {}; // To de-duplicate table
+                const conflictTableEntries = {};
                 
-                // 2. Mark events and build table entries
                 conflicts.forEach(conflict => {
                     conflict.event.setExtendedProp('isConflict', true);
                     conflictEvents.add(conflict.event.extendedProps.id);
@@ -1023,11 +925,10 @@ function handleSaveShift() {
                     conflictTableEntries[key].dates.add(conflict.date);
                 });
 
-                // 3. Populate Conflict Table
-                if (Object.keys(conflictTableEntries).length > 0) {
-                    conflictsPlaceholder.classList.add('hidden');
+                if (Object.keys(conflictTableEntries).length > 0 && conflictTableBody) {
+                    if (conflictsPlaceholder) conflictsPlaceholder.classList.add('hidden');
                     Object.values(conflictTableEntries).forEach(entry => {
-                        const emp = employees[entry.empNo];
+                        const emp = employees[entry.empNo] || { name: entry.empNo, empNo: entry.empNo };
                         const tr = document.createElement('tr');
                         tr.className = 'bg-yellow-50 border-b border-yellow-200';
                         tr.innerHTML = `
@@ -1039,50 +940,40 @@ function handleSaveShift() {
                         conflictTableBody.appendChild(tr);
                     });
                 } else {
-                    conflictsPlaceholder.classList.remove('hidden');
+                    if (conflictsPlaceholder) conflictsPlaceholder.classList.remove('hidden');
                 }
-
-                // 4. No full re-render here — event.setExtendedProp / setProp already triggers DOM updates.
                 
-                // 5. Update stats
                 updateStats(conflictEvents.size);
             }
             
             
             // --- CORE APP ACTIONS ---
             
-            /**
-             * Updates the floating stats bar.
-             */
             function updateStats(conflictCount = null) {
-                const allEvents = calendar.getEvents();
+                const allEvents = calendar ? calendar.getEvents() : [];
                 const workCount = allEvents.filter(e => e.extendedProps.type === 'work').length;
                 const restCount = allEvents.filter(e => e.extendedProps.type === 'rest').length;
                 
-                // If conflictCount isn't passed, calculate it
                 if (conflictCount === null) {
                     conflictCount = allEvents.filter(e => e.extendedProps.isConflict).length;
                 }
                 
                 const empCount = Object.keys(employees).length;
 
-                statsWork.textContent = workCount;
-                statsRest.textContent = restCount;
-                statsConflicts.textContent = conflictCount;
-                statsEmployees.textContent = empCount;
+                if (statsWork) statsWork.textContent = workCount;
+                if (statsRest) statsRest.textContent = restCount;
+                if (statsConflicts) statsConflicts.textContent = conflictCount;
+                if (statsEmployees) statsEmployees.textContent = empCount;
             }
 
-            /**
-             * Generates and downloads an Excel file of the schedule.
-             */
             function exportToExcel() {
+                if (!calendar) return;
                 const conflicts = getConflicts();
                 const allEvents = calendar.getEvents();
                 const daysOfWeek = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
                 const wb = XLSX.utils.book_new();
 
-                // --- Sheet 1: Work Schedule ---
                 const workData = [
                     ['Name', 'Employee No', 'Position', 'Work Date', 'Shift Code', 'Day']
                 ];
@@ -1090,20 +981,19 @@ function handleSaveShift() {
                     .filter(e => e.extendedProps.type === 'work')
                     .sort((a,b) => a.start - b.start || a.title.localeCompare(b.title))
                     .forEach(e => {
-                        const emp = employees[e.extendedProps.empNo];
+                        const emp = employees[e.extendedProps.empNo] || { name: 'N/A', empNo: e.extendedProps.empNo, position: 'N/A' };
                         workData.push([
                             emp.name,
                             emp.empNo,
                             emp.position,
                             e.startStr,
-                            daysOfWeek[e.start.getDay()],
-                            e.extendedProps.shiftCode || 'N/A'
+                            e.extendedProps.shiftCode || 'N/A',
+                            daysOfWeek[e.start.getDay()]
                         ]);
                     });
                 const wsWork = XLSX.utils.aoa_to_sheet(workData);
                 XLSX.utils.book_append_sheet(wb, wsWork, 'Work Schedule');
                 
-                // --- Sheet 2: Rest Schedule ---
                 const restData = [
                     ['Name', 'Employee No', 'Position', 'Rest Date', 'Day']
                 ];
@@ -1111,7 +1001,7 @@ function handleSaveShift() {
                     .filter(e => e.extendedProps.type === 'rest')
                     .sort((a,b) => a.start - b.start || a.title.localeCompare(b.title))
                     .forEach(e => {
-                        const emp = employees[e.extendedProps.empNo];
+                        const emp = employees[e.extendedProps.empNo] || { name: 'N/A', empNo: e.extendedProps.empNo, position: 'N/A' };
                         restData.push([
                             emp.name,
                             emp.empNo,
@@ -1123,12 +1013,10 @@ function handleSaveShift() {
                 const wsRest = XLSX.utils.aoa_to_sheet(restData);
                 XLSX.utils.book_append_sheet(wb, wsRest, 'Rest Schedule');
                 
-                // --- Sheet 3: Conflicts (if any) ---
                 if (conflicts.length > 0) {
                     const conflictData = [
                         ['Employee Name', 'Employee No', 'Policy Violated', 'Dates Involved']
                     ];
-                    // Use the same de-duplication as the summary table
                     const conflictTableEntries = {};
                     conflicts.forEach(conflict => {
                         const key = `${conflict.empNo}-${conflict.rule}`;
@@ -1143,7 +1031,7 @@ function handleSaveShift() {
                     });
                     
                     Object.values(conflictTableEntries).forEach(entry => {
-                        const emp = employees[entry.empNo];
+                        const emp = employees[entry.empNo] || { name: entry.empNo, empNo: entry.empNo };
                         conflictData.push([
                             emp.name,
                             emp.empNo,
@@ -1155,21 +1043,14 @@ function handleSaveShift() {
                     XLSX.utils.book_append_sheet(wb, wsConflicts, 'Conflict Summary');
                 }
                 
-                // --- Download ---
                 XLSX.writeFile(wb, 'Branch_Schedule_Report.xlsx');
-                closeModal(exportModal);
+                if (exportModal) closeModal(exportModal);
                 showToast('Excel report downloaded successfully!', 'success');
             }
             
-            /**
-             * Resets the entire application state.
-             */
             function resetAll() {
-                // Simple confirm, though a modal is safer.
-                // Using a custom modal would be better, but this is faster.
-                // Let's use the delete modal logic.
-                // Re-purposing delete modal for reset confirmation
-                currentDeletingEvent = null; // Ensure this is null
+                if (!deleteModal || !deleteModalSummary || !confirmDeleteBtn) return;
+                currentDeletingEvent = null;
                 deleteModalSummary.textContent = "This will clear all employees, cards, and calendar data. This action cannot be undone.";
                 deleteModal.querySelector('h3').textContent = "Reset All Data?";
                 confirmDeleteBtn.textContent = "Confirm Reset";
@@ -1179,27 +1060,24 @@ function handleSaveShift() {
                 deleteModal.classList.remove('hidden');
                 localStorage.clear();
                 
-                // Change the confirm button's action
                 confirmDeleteBtn.onclick = () => {
-                    // Perform the reset
                     employees = {};
-                    calendar.removeAllEvents();
-                    employeeTableBody.innerHTML = '';
-                    addEmployeeRow(); // Add one blank row back
-                    draggableCardsContainer.innerHTML = '';
-                    draggablePlaceholder.classList.remove('hidden');
-                    if (draggable) draggable.destroy();
-                    conflictTableBody.innerHTML = '';
-                    conflictsPlaceholder.classList.remove('hidden');
+                    if (calendar) calendar.removeAllEvents();
+                    if (employeeTableBody) employeeTableBody.innerHTML = '';
+                    addEmployeeRow();
+                    if (draggableCardsContainer) draggableCardsContainer.innerHTML = '';
+                    if (draggablePlaceholder) draggablePlaceholder.classList.remove('hidden');
+                    if (draggable) try { draggable.destroy(); } catch (e) {}
+                    if (conflictTableBody) conflictTableBody.innerHTML = '';
+                    if (conflictsPlaceholder) conflictsPlaceholder.classList.remove('hidden');
                     updateStats(0);
                     
-                    // Reset modal
                     closeModal(deleteModal);
                     deleteModal.querySelector('h3').textContent = "Delete Schedule Entry";
                     confirmDeleteBtn.textContent = "Delete";
                     confirmDeleteBtn.classList.add('bg-red-600', 'hover:bg-red-700', 'focus:ring-red-500');
                     confirmDeleteBtn.classList.remove('bg-orange-600', 'hover:bg-orange-700', 'focus:ring-orange-500');
-                    confirmDeleteBtn.onclick = handleConfirmDelete; // Restore original handler
+                    confirmDeleteBtn.onclick = handleConfirmDelete;
 
                     showToast('Scheduler has been reset.', 'success');
                 };
@@ -1207,32 +1085,32 @@ function handleSaveShift() {
             
 
             // --- EVENT LISTENERS ---
-            
-            // Employee Table
-            document.getElementById('add-row-btn').addEventListener('click', addEmployeeRow);
-            document.getElementById('save-generate-btn').addEventListener('click', saveAndGenerate);
-            employeeTableBody.addEventListener('click', function(e) {
-                const removeBtn = e.target.closest('.remove-row-btn');
-                if (removeBtn) {
-                    removeEmployeeRow(removeBtn);
-                }
-            });
+            const addRowBtnEl = document.getElementById('add-row-btn');
+            if (addRowBtnEl) addRowBtnEl.addEventListener('click', addEmployeeRow);
+            const saveGenerateBtnEl = document.getElementById('save-generate-btn');
+            if (saveGenerateBtnEl) saveGenerateBtnEl.addEventListener('click', saveAndGenerate);
+            if (employeeTableBody) {
+              employeeTableBody.addEventListener('click', function(e) {
+                  const removeBtn = e.target.closest('.remove-row-btn');
+                  if (removeBtn) {
+                      removeEmployeeRow(removeBtn);
+                  }
+              });
+            }
 
-            // Top Header Buttons
-            document.getElementById('export-btn').addEventListener('click', openExportModal);
-            document.getElementById('reset-btn').addEventListener('click', resetAll);
+            const exportBtnEl = document.getElementById('export-btn');
+            if (exportBtnEl) exportBtnEl.addEventListener('click', openExportModal);
+            const resetBtnEl = document.getElementById('reset-btn');
+            if (resetBtnEl) resetBtnEl.addEventListener('click', resetAll);
             
-            // Modal Buttons
-            saveShiftBtn.addEventListener('click', handleSaveShift);
-            confirmExportBtn.addEventListener('click', exportToExcel);
-            confirmDeleteBtn.addEventListener('click', handleConfirmDelete);
+            if (saveShiftBtn) saveShiftBtn.addEventListener('click', handleSaveShift);
+            if (confirmExportBtn) confirmExportBtn.addEventListener('click', exportToExcel);
+            if (confirmDeleteBtn) confirmDeleteBtn.addEventListener('click', handleConfirmDelete);
             
-            // Modal Close Triggers
             document.querySelectorAll('[data-modal-close]').forEach(btn => {
                 btn.addEventListener('click', () => handleCloseModal(btn.dataset.modalClose));
             });
             
-            // Close modal on backdrop click
             document.querySelectorAll('.modal-backdrop').forEach(backdrop => {
                 backdrop.addEventListener('click', function(e) {
                     if (e.target === this) {
@@ -1241,12 +1119,11 @@ function handleSaveShift() {
                 });
             });
 
-            // Close modal with ESC key
             document.addEventListener('keydown', function (e) {
                 if (e.key === 'Escape') {
-                    if (!shiftModal.classList.contains('hidden')) handleCloseModal('shift-modal');
-                    if (!exportModal.classList.contains('hidden')) handleCloseModal('export-modal');
-                    if (!deleteModal.classList.contains('hidden')) handleCloseModal('delete-modal');
+                    if (shiftModal && !shiftModal.classList.contains('hidden')) handleCloseModal('shift-modal');
+                    if (exportModal && !exportModal.classList.contains('hidden')) handleCloseModal('export-modal');
+                    if (deleteModal && !deleteModal.classList.contains('hidden')) handleCloseModal('delete-modal');
                 }
             });
 
@@ -1304,7 +1181,6 @@ function pasteEmployeeSchedule(targetEmpNo) {
     return;
   }
 
-  // Apply copied values
   target.empNo = copiedEmployeeData.empNo;
   target.name = copiedEmployeeData.name;
   target.shiftg = copiedEmployeeData.shiftg;
@@ -1313,7 +1189,6 @@ function pasteEmployeeSchedule(targetEmpNo) {
   saveToLocalStorage();
 }
 
-// --- Keyboard shortcuts (Ctrl + C / Ctrl + V) ---
 document.addEventListener('keydown', (e) => {
   const hovered = document.querySelector('[data-empno]:hover');
   if (!hovered) return;
@@ -1324,9 +1199,9 @@ document.addEventListener('keydown', (e) => {
 
 
             initializeCalendar();
-initializeDraggable();
-addEmployeeRow();
-loadFromLocalStorage(); // ✅ restore employees & events
-updateStats();
+            initializeDraggable();
+            addEmployeeRow();
+            loadFromLocalStorage();
+            updateStats();
             
         });
