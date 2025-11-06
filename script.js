@@ -4,6 +4,7 @@ document.addEventListener('DOMContentLoaded', function () {
             
             // In-memory 'database' for employees
             let employees = {};
+let employeeColors = JSON.parse(localStorage.getItem('employeeColors')) || {};
 
             // --- COPY / PASTE SUPPORT ---
 let copiedEmployeeSchedule = null;
@@ -226,6 +227,7 @@ function saveToLocalStorage() {
     })) : [];
     localStorage.setItem('employees', JSON.stringify(employees));
     localStorage.setItem('events', JSON.stringify(allEvents));
+    localStorage.setItem('employeeColors', JSON.stringify(employeeColors));
   } catch (err) {
     console.warn('saveToLocalStorage error', err);
   }
@@ -375,14 +377,23 @@ eventDidMount: function(info) {
   const { type, shiftCode, isConflict, empNo } = info.event.extendedProps;
   const emp = employees[empNo];
 
-  // --- Unique Employee Color Assignment (solid vs border) ---
-  const baseColors = [
-    '#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899',
-    '#14b8a6', '#ef4444', '#22c55e', '#eab308', '#0ea5e9'
-  ];
-  const empKeys = Object.keys(employees);
-  const empIndex = empKeys.indexOf(empNo);
-  const color = baseColors[empIndex % baseColors.length];
+// --- Persistent Unique Employee Color Assignment (solid vs border) ---
+const baseColors = [
+  '#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#14b8a6',
+  '#ef4444', '#22c55e', '#eab308', '#0ea5e9', '#6366f1', '#84cc16',
+  '#d946ef', '#0d9488', '#fb923c', '#a855f7', '#475569', '#f97316',
+  '#64748b', '#60a5fa', '#65a30d', '#f43f5e', '#0ea5e9', '#059669',
+  '#7c3aed', '#e11d48', '#9333ea', '#2563eb', '#9ca3af', '#15803d'
+];
+
+if (!employeeColors[empNo]) {
+  const usedColors = Object.values(employeeColors);
+  const availableColors = baseColors.filter(c => !usedColors.includes(c));
+  const color = availableColors.length ? availableColors[0] : baseColors[empKeys.indexOf(empNo) % baseColors.length];
+  employeeColors[empNo] = color;
+}
+const color = employeeColors[empNo];
+
 
   if (type === 'work') {
     info.el.style.backgroundColor = color;
