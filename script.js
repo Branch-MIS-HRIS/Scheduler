@@ -40,7 +40,7 @@ let copiedEmployeeData = null; // previously undeclared
 
             // --- DOM Elements ---
             const calendarEl = document.getElementById('calendar');
-            const employeeTableBody = document.getElementById('employee-table-body');
+            let employeeTableBody = document.getElementById('employee-table-body');
             const draggableCardsContainer = document.getElementById('draggable-cards-container');
             const draggablePlaceholder = document.getElementById('draggable-placeholder');
             const conflictTableBody = document.getElementById('conflict-table-body');
@@ -588,7 +588,8 @@ const color = employeeColors[empNo];
                       </div>
                     `;
                     sidebar.insertBefore(wrapper, sidebar.firstChild);
-                    // rebind the variable (note: outer const can't be reassigned; use DOM lookup below)
+                    // rebind the variable so later code sees the newly created table
+                    employeeTableBody = document.getElementById('employee-table-body');
                 }
                 const tbody = document.getElementById('employee-table-body');
                 if (!tbody) {
