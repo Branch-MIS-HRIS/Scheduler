@@ -389,8 +389,22 @@ const baseColors = [
 if (!employeeColors[empNo]) {
   const usedColors = Object.values(employeeColors);
   const availableColors = baseColors.filter(c => !usedColors.includes(c));
-  const color = availableColors.length ? availableColors[0] : baseColors[empKeys.indexOf(empNo) % baseColors.length];
+  let color;
+  if (availableColors.length) {
+    color = availableColors[0];
+  } else {
+    // deterministic fallback when all base colors are used:
+    // hash the employee number/string to pick a color index
+    const key = String(empNo || '');
+    let hash = 0;
+    for (let i = 0; i < key.length; i++) {
+      hash = ((hash << 5) - hash) + key.charCodeAt(i);
+      hash |= 0; // convert to 32bit int
+    }
+    color = baseColors[Math.abs(hash) % baseColors.length];
+  }
   employeeColors[empNo] = color;
+  try { localStorage.setItem('employeeColors', JSON.stringify(employeeColors)); } catch (e) {}
 }
 const color = employeeColors[empNo];
 
