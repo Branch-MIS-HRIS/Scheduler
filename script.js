@@ -6,6 +6,42 @@ document.addEventListener('DOMContentLoaded', function () {
             let employees = {};
 let employeeColors = JSON.parse(localStorage.getItem('employeeColors')) || {};
 
+/* ====== MOVED HELPERS: make gradient/color helpers top-level so other code can use them ====== */
+function rgbToHsl(r, g, b) {
+  r /= 255; g /= 255; b /= 255;
+  const max = Math.max(r, g, b), min = Math.min(r, g, b);
+  let h, s, l = (max + min) / 2;
+  if (max === min) { h = s = 0; }
+  else {
+    const d = max - min;
+    s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+    switch (max) {
+      case r: h = (g - b) / d + (g < b ? 6 : 0); break;
+      case g: h = (b - r) / d + 2; break;
+      case b: h = (r - g) / d + 4; break;
+    }
+    h /= 6;
+  }
+  return [Math.round(h * 360), s, l];
+}
+
+function getGradientFromBaseColor(hex, type = 'work') {
+  if (!hex || hex[0] !== '#') return '';
+  // Convert hex to RGB
+  const rgb = parseInt(hex.slice(1), 16);
+  const r = (rgb >> 16) & 255;
+  const g = (rgb >> 8) & 255;
+  const b = rgb & 255;
+  const hsl = rgbToHsl(r, g, b);
+  const [h, s, l] = hsl;
+
+  if (type === 'work') {
+    return `linear-gradient(135deg, hsl(${h}, ${Math.round(s * 100)}%, ${Math.max(25, Math.round(l * 100) - 10)}%), hsl(${h}, ${Math.round(s * 100)}%, ${Math.min(70, Math.round(l * 100) + 10)}%))`;
+  } else {
+    return `linear-gradient(135deg, hsl(${h}, ${Math.round(s * 100)}%, ${Math.min(90, Math.round(l * 100) + 20)}%), hsl(${h}, ${Math.round(s * 100)}%, ${Math.min(95, Math.round(l * 100) + 25)}%))`;
+  }
+}
+
             // --- COPY / PASTE SUPPORT ---
 let copiedEmployeeSchedule = null;
 let copiedEmployeeNo = null;
@@ -241,15 +277,40 @@ function loadFromLocalStorage() {
     if (storedEmployees && Object.keys(storedEmployees).length > 0) {
       employees = storedEmployees;
       if (draggableCardsContainer) draggableCardsContainer.innerHTML = '';
+
+      // ensure employeeColors is available (persisted earlier by saveToLocalStorage)
+      employeeColors = JSON.parse(localStorage.getItem('employeeColors')) || employeeColors || {};
+
+      const baseColors = [
+        '#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#14b8a6',
+        '#ef4444', '#22c55e', '#eab308', '#0ea5e9', '#6366f1', '#84cc16',
+        '#d946ef', '#0d9488', '#fb923c', '#a855f7', '#475569', '#f97316',
+        '#64748b', '#60a5fa', '#65a30d', '#f43f5e', '#059669', '#7c3aed',
+        '#e11d48', '#9333ea', '#2563eb', '#9ca3af', '#15803d'
+      ];
+
       Object.values(employees).forEach(emp => {
+        // assign or reuse a color (same logic used in saveAndGenerate)
+        if (!employeeColors[emp.empNo]) {
+          const used = Object.values(employeeColors);
+          const available = baseColors.filter(c => !used.includes(c));
+          const pick = available.length ? available[0] : baseColors[Object.keys(employeeColors).length % baseColors.length];
+          employeeColors[emp.empNo] = pick;
+        }
+        const color = employeeColors[emp.empNo];
+
         const workEventData = {
           title: emp.name,
-          extendedProps: { type: 'work', empNo: emp.empNo || emp.empNo, position: emp.position }
+          extendedProps: { type: 'work', empNo: emp.empNo, position: emp.position }
         };
         const restEventData = {
           title: emp.name,
-          extendedProps: { type: 'rest', empNo: emp.empNo || emp.empNo, position: emp.position }
+          extendedProps: { type: 'rest', empNo: emp.empNo, position: emp.position }
         };
+
+        const workStyle = `background:${getGradientFromBaseColor(color, 'work')}; color:#fff; border:none;`;
+        const restStyle = `background:${getGradientFromBaseColor(color, 'rest')}; color:${color}; border:2px solid ${color};`;
+
         const cardHtml = `
           <div class="p-3 bg-white rounded-lg shadow-sm border border-gray-200" data-empno="${emp.empNo}">
             <div class="flex items-center justify-between">
@@ -258,13 +319,17 @@ function loadFromLocalStorage() {
                 <div class="text-xs text-gray-500">${emp.position}</div>
               </div>
               <div class="flex space-x-2">
-                <div class='fc-event-pill fc-event-work px-3 py-1 text-xs font-medium rounded-full' data-event='${JSON.stringify(workEventData)}'>🟦 Work</div>
-                <div class='fc-event-pill fc-event-rest px-3 py-1 text-xs font-medium rounded-full' data-event='${JSON.stringify(restEventData)}'>🔴 Rest</div>
+                <div class='fc-event-pill fc-event-work px-3 py-1 text-xs font-medium rounded-full' data-event='${JSON.stringify(workEventData)}' style="${workStyle}">🟦 Work</div>
+                <div class='fc-event-pill fc-event-rest px-3 py-1 text-xs font-medium rounded-full' data-event='${JSON.stringify(restEventData)}' style="${restStyle}">🔴 Rest</div>
               </div>
             </div>
           </div>`;
         if (draggableCardsContainer) draggableCardsContainer.innerHTML += cardHtml;
       });
+
+      // persist employeeColors if we populated new values
+      try { localStorage.setItem('employeeColors', JSON.stringify(employeeColors)); } catch (e) {}
+
       if (draggablePlaceholder) draggablePlaceholder.classList.add('hidden');
       initializeDraggable();
     }
