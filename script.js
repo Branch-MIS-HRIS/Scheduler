@@ -368,46 +368,65 @@ function loadFromLocalStorage() {
                         openDeleteModal(info.event);
                     },
 
-                    /**
-                     * Fired after an event is rendered. Used for tooltips and styling.
-                     */
-                    eventDidMount: function(info) {
-                        const { type, shiftCode, isConflict, empNo } = info.event.extendedProps;
-                        const emp = employees[empNo];
+/**
+ * Fired after an event is rendered. Used for tooltips and styling.
+ */
+eventDidMount: function(info) {
+  const { type, shiftCode, isConflict, empNo } = info.event.extendedProps;
+  const emp = employees[empNo];
 
-                        try {
-                          tippy(info.el, {
-                            content: `
-                              <div class='text-sm'>
-                                <div><strong>Employee #:</strong> ${emp ? emp.empNo : empNo}</div>
-                                <div><strong>Position:</strong> ${emp ? emp.position : 'N/A'}</div>
-                                <div><strong>Shift:</strong> ${type === 'work' ? 'Work' : 'Rest'}</div>
-                              </div>
-                            `,
-                            allowHTML: true,
-                            theme: 'light-border',
-                            placement: 'top',
-                          });
-                        } catch (e) {}
+  // --- Unique Employee Color Assignment (solid vs border) ---
+  const baseColors = [
+    '#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899',
+    '#14b8a6', '#ef4444', '#22c55e', '#eab308', '#0ea5e9'
+  ];
+  const empKeys = Object.keys(employees);
+  const empIndex = empKeys.indexOf(empNo);
+  const color = baseColors[empIndex % baseColors.length];
 
-                        if (!emp) {
-                            console.error(`Event ${info.event.id || ''} has invalid employee data (empNo: ${empNo}). Hiding event.`);
-                            info.el.style.display = 'none';
-                            return;
-                        }
-                        
-                        info.el.classList.add(type === 'work' ? 'fc-event-work' : 'fc-event-rest');
-                        
-                        if (isConflict) {
-                            info.el.classList.add('fc-event-conflict');
-                        } else {
-                            info.el.classList.remove('fc-event-conflict');
-                        }
+  if (type === 'work') {
+    info.el.style.backgroundColor = color;
+    info.el.style.color = '#fff';
+    info.el.style.border = 'none';
+  } else if (type === 'rest') {
+    info.el.style.backgroundColor = '#fff';
+    info.el.style.border = `2px solid ${color}`;
+    info.el.style.color = color;
+  }
 
-                        const shiftInfo = shiftCode ? ` (${shiftCode})` : '';
-                        const title = `${info.event.title} (${emp.position})\nType: ${type.charAt(0).toUpperCase() + type.slice(1)}${shiftInfo}`;
-                        info.el.title = title;
-                    },
+  try {
+    tippy(info.el, {
+      content: `
+        <div class='text-sm'>
+          <div><strong>Employee #:</strong> ${emp ? emp.empNo : empNo}</div>
+          <div><strong>Position:</strong> ${emp ? emp.position : 'N/A'}</div>
+          <div><strong>Shift:</strong> ${type === 'work' ? 'Work' : 'Rest'}</div>
+        </div>
+      `,
+      allowHTML: true,
+      theme: 'light-border',
+      placement: 'top',
+    });
+  } catch (e) {}
+
+  if (!emp) {
+    console.error(`Event ${info.event.id || ''} has invalid employee data (empNo: ${empNo}). Hiding event.`);
+    info.el.style.display = 'none';
+    return;
+  }
+
+  info.el.classList.add(type === 'work' ? 'fc-event-work' : 'fc-event-rest');
+
+  if (isConflict) {
+    info.el.classList.add('fc-event-conflict');
+  } else {
+    info.el.classList.remove('fc-event-conflict');
+  }
+
+  const shiftInfo = shiftCode ? ` (${shiftCode})` : '';
+  const title = `${info.event.title} (${emp.position})\nType: ${type.charAt(0).toUpperCase() + type.slice(1)}${shiftInfo}`;
+  info.el.title = title;
+},
 
                     /**
                      * Customizes the inner content of the event.
