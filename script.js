@@ -6,9 +6,6 @@ document.addEventListener('DOMContentLoaded', function () {
             let employees = {};
 let employeeColors = JSON.parse(localStorage.getItem('employeeColors')) || {};
 
-// add variable to hold style for external-drags
-let __lastDraggedInlineStyle = '';
-
 /* ====== MOVED HELPERS: make gradient/color helpers top-level so other code can use them ====== */
 function rgbToHsl(r, g, b) {
   r /= 255; g /= 255; b /= 255;
@@ -452,49 +449,144 @@ eventDidMount: function(info) {
     return;
   }
 
-  // Use any saved inline style attached during draggable creation/load
-  const savedInline = info.event.extendedProps && info.event.extendedProps._inlineStyle;
-  if (savedInline && savedInline.trim()) {
-    try {
-      // apply to host element and main-frame for consistent look
-      info.el.style.cssText += savedInline;
-      const inner = info.el.querySelector('.fc-event-main-frame') || info.el;
-      inner.style.cssText += savedInline;
-    } catch (e) { /* ignore */ }
+  // 🔸 Generate gradient tints from a base hex color
+function getGradientFromBaseColor(hex, type = 'work') {
+  if (!hex || hex[0] !== '#') return '';
+  // Convert hex to RGB
+  const rgb = parseInt(hex.slice(1), 16);
+  const r = (rgb >> 16) & 255;
+  const g = (rgb >> 8) & 255;
+  const b = rgb & 255;
+  const hsl = rgbToHsl(r, g, b);
+  const [h, s, l] = hsl;
+
+  if (type === 'work') {
+    return `linear-gradient(135deg, hsl(${h}, ${Math.round(s * 100)}%, ${Math.max(25, Math.round(l * 100) - 10)}%), hsl(${h}, ${Math.round(s * 100)}%, ${Math.min(70, Math.round(l * 100) + 10)}%))`;
   } else {
-    // fallback to per-employee color gradients (existing logic)
-    const color = employeeColors[empNo] || '#3b82f6';
-    if (type === 'work') {
-      const grad = getGradientFromBaseColor(color, 'work');
-      try {
-        info.el.style.setProperty('background', grad, 'important');
-        info.el.style.setProperty('color', '#fff', 'important');
-        info.el.style.setProperty('border', 'none', 'important');
-        const inner = info.el.querySelector('.fc-event-main-frame') || info.el;
-        inner.style.setProperty('background', grad, 'important');
-        inner.style.setProperty('color', '#fff', 'important');
-      } catch (e) {
-        info.el.style.backgroundColor = color;
-        info.el.style.color = '#fff';
-        info.el.style.border = 'none';
-      }
-    } else if (type === 'rest') {
-      const grad = getGradientFromBaseColor(color, 'rest');
-      try {
-        info.el.style.setProperty('background', grad, 'important');
-        info.el.style.setProperty('color', color, 'important');
-        info.el.style.setProperty('border', `2px solid ${color}`, 'important');
-        const inner = info.el.querySelector('.fc-event-main-frame') || info.el;
-        inner.style.setProperty('background', grad, 'important');
-        inner.style.setProperty('color', color, 'important');
-        inner.style.setProperty('border', `2px solid ${color}`, 'important');
-      } catch (e) {
-        info.el.style.backgroundColor = '#fff';
-        info.el.style.border = `2px solid ${color}`;
-        info.el.style.color = color;
-      }
-    }
+    return `linear-gradient(135deg, hsl(${h}, ${Math.round(s * 100)}%, ${Math.min(90, Math.round(l * 100) + 20)}%), hsl(${h}, ${Math.round(s * 100)}%, ${Math.min(95, Math.round(l * 100) + 25)}%))`;
   }
+}
+
+/* ====== MOVED HELPERS: make gradient/color helpers top-level so other code can use them ====== */
+function rgbToHsl(r, g, b) {
+  r /= 255; g /= 255; b /= 255;
+  const max = Math.max(r, g, b), min = Math.min(r, g, b);
+  let h, s, l = (max + min) / 2;
+  if (max === min) { h = s = 0; }
+  else {
+    const d = max - min;
+    s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+    switch (max) {
+      case r: h = (g - b) / d + (g < b ? 6 : 0); break;
+      case g: h = (b - r) / d + 2; break;
+      case b: h = (r - g) / d + 4; break;
+    }
+    h /= 6;
+  }
+  return [Math.round(h * 360), s, l];
+}
+
+function getGradientFromBaseColor(hex, type = 'work') {
+  if (!hex || hex[0] !== '#') return '';
+  // Convert hex to RGB
+  const rgb = parseInt(hex.slice(1), 16);
+  const r = (rgb >> 16) & 255;
+  const g = (rgb >> 8) & 255;
+  const b = rgb & 255;
+  const hsl = rgbToHsl(r, g, b);
+  const [h, s, l] = hsl;
+
+  if (type === 'work') {
+    return `linear-gradient(135deg, hsl(${h}, ${Math.round(s * 100)}%, ${Math.max(25, Math.round(l * 100) - 10)}%), hsl(${h}, ${Math.round(s * 100)}%, ${Math.min(70, Math.round(l * 100) + 10)}%))`;
+  } else {
+    return `linear-gradient(135deg, hsl(${h}, ${Math.round(s * 100)}%, ${Math.min(90, Math.round(l * 100) + 20)}%), hsl(${h}, ${Math.round(s * 100)}%, ${Math.min(95, Math.round(l * 100) + 25)}%))`;
+  }
+}
+
+// --- Persistent Unique Employee Color Assignment (solid vs border) ---
+const baseColors = [
+  '#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#14b8a6',
+  '#ef4444', '#22c55e', '#eab308', '#0ea5e9', '#6366f1', '#84cc16',
+  '#d946ef', '#0d9488', '#fb923c', '#a855f7', '#475569', '#f97316',
+  '#64748b', '#60a5fa', '#65a30d', '#f43f5e', '#0ea5e9', '#059669',
+  '#7c3aed', '#e11d48', '#9333ea', '#2563eb', '#9ca3af', '#15803d'
+];
+
+if (!employeeColors[empNo]) {
+  const usedColors = Object.values(employeeColors);
+  const availableColors = baseColors.filter(c => !usedColors.includes(c));
+  let color;
+  if (availableColors.length) {
+    color = availableColors[0];
+  } else {
+    // deterministic fallback when all base colors are used:
+    // hash the employee number/string to pick a color index
+    const key = String(empNo || '');
+    let hash = 0;
+    for (let i = 0; i < key.length; i++) {
+      hash = ((hash << 5) - hash) + key.charCodeAt(i);
+      hash |= 0; // convert to 32bit int
+    }
+    color = baseColors[Math.abs(hash) % baseColors.length];
+  }
+  employeeColors[empNo] = color;
+  try { localStorage.setItem('employeeColors', JSON.stringify(employeeColors)); } catch (e) {}
+}
+const color = employeeColors[empNo];
+
+
+if (type === 'work') {
+  // 🔸 Gradient-based background for Work type
+  try {
+    const grad = getGradientFromBaseColor(color, 'work');
+    info.el.style.setProperty('background', grad, 'important');
+    info.el.style.setProperty('background-image', 'none', 'important');
+    info.el.style.setProperty('color', '#fff', 'important');
+    info.el.style.setProperty('border', 'none', 'important');
+
+    const inner = info.el.querySelector('.fc-event-main-frame') || info.el;
+    inner.style.setProperty('background', grad, 'important');
+    inner.style.setProperty('background-image', 'none', 'important');
+    inner.style.setProperty('color', '#fff', 'important');
+  } catch (e) {
+    // Fallback flat color
+    info.el.style.backgroundColor = color;
+    info.el.style.backgroundImage = 'none';
+    info.el.style.color = '#fff';
+    info.el.style.border = 'none';
+    const inner = info.el.querySelector('.fc-event-main-frame') || info.el;
+    inner.style.backgroundColor = color;
+    inner.style.backgroundImage = 'none';
+    inner.style.color = '#fff';
+  }
+} else if (type === 'rest') {
+  // 🔸 Gradient-based background for Rest type
+  try {
+    const grad = getGradientFromBaseColor(color, 'rest');
+    info.el.style.setProperty('background', grad, 'important');
+    info.el.style.setProperty('background-image', 'none', 'important');
+    info.el.style.setProperty('color', color, 'important');
+    info.el.style.setProperty('border', `2px solid ${color}`, 'important');
+
+    const inner = info.el.querySelector('.fc-event-main-frame') || info.el;
+    inner.style.setProperty('background', grad, 'important');
+    inner.style.setProperty('background-image', 'none', 'important');
+    inner.style.setProperty('color', color, 'important');
+    inner.style.setProperty('border', `2px solid ${color}`, 'important');
+  } catch (e) {
+    // Fallback flat color
+    info.el.style.backgroundColor = '#fff';
+    info.el.style.backgroundImage = 'none';
+    info.el.style.border = `2px solid ${color}`;
+    info.el.style.color = color;
+    const inner = info.el.querySelector('.fc-event-main-frame') || info.el;
+    inner.style.backgroundColor = '#fff';
+    inner.style.backgroundImage = 'none';
+    inner.style.border = `2px solid ${color}`;
+    inner.style.color = color;
+  }
+}
+
 
   try {
     tippy(info.el, {
@@ -579,33 +671,7 @@ try {
         const parsed = JSON.parse(eventEl.getAttribute('data-event'));
         const t = parsed.extendedProps && parsed.extendedProps.type ? parsed.extendedProps.type : '';
         parsed.classNames = t === 'rest' ? ['fc-event-rest'] : ['fc-event-work'];
-
-        // Capture inline style (prefer inline attribute if present), fallback to computed style
-        const inlineAttr = eventEl.getAttribute('style') || '';
-        if (inlineAttr && inlineAttr.trim()) {
-          parsed.extendedProps = parsed.extendedProps || {};
-          parsed.extendedProps._inlineStyle = inlineAttr;
-        } else {
-          // use a minimal computed style snapshot (background/color/border)
-          try {
-            const cs = window.getComputedStyle(eventEl);
-            const snapshot = [
-              `background: ${cs.background || cs.backgroundImage || ''};`,
-              `color: ${cs.color || ''};`,
-              `border: ${cs.border || ''};`,
-              `box-shadow: ${cs.boxShadow || ''};`,
-              `border-radius: ${cs.borderRadius || ''};`
-            ].join(' ');
-            parsed.extendedProps = parsed.extendedProps || {};
-            parsed.extendedProps._inlineStyle = snapshot;
-          } catch (e) {
-            // ignore computed style errors
-          }
-        }
-
-        // store last dragged style (used for external drag preview)
-        __lastDraggedInlineStyle = (parsed.extendedProps && parsed.extendedProps._inlineStyle) || '';
-
+        // Let CSS handle background color per type
         eventEl._fcEventData = parsed;
         return parsed;
       } catch (err) {
@@ -618,54 +684,13 @@ try {
   console.warn('initializeDraggable error', err);
 }
 
-// add a native dragstart capture to copy style onto the FullCalendar mirror for external drags
-if (draggableCardsContainer) {
-  draggableCardsContainer.addEventListener('dragstart', function (e) {
-    const pill = e.target.closest && e.target.closest('.fc-event-pill');
-    if (!pill) return;
-    // prefer inline attribute else computed style string
-    const s = pill.getAttribute('style') || (() => {
-      try { return window.getComputedStyle(pill).cssText; } catch(e){ return ''; }
-    })();
-    __lastDraggedInlineStyle = s || __lastDraggedInlineStyle;
-    // small timeout to let FullCalendar create mirror element, then apply
-    setTimeout(() => {
-      const mirror = document.querySelector('.fc-mirror');
-      if (mirror && __lastDraggedInlineStyle) {
-        try {
-          // merge styles without clobbering other required FC inline props
-          mirror.style.cssText += __lastDraggedInlineStyle;
-        } catch (err) {}
-      }
-    }, 5);
-  }, { passive: true });
-}
-
-// also ensure when dragging existing calendar events, we copy the rendered style into the mirror
-if (calendar && typeof calendar.on === 'function') {
-  calendar.on('eventDragStart', function(info) {
-    // copy the source element computed/inline style to the mirror element
-    setTimeout(() => {
-      const mirror = document.querySelector('.fc-mirror');
-      if (!mirror) return;
-      // prefer explicit saved inline style on the event
-      const saved = info.event.extendedProps && info.event.extendedProps._inlineStyle;
-      if (saved) {
-        mirror.style.cssText += saved;
-      } else if (info.el) {
-        try {
-          mirror.style.cssText += (info.el.getAttribute('style') || window.getComputedStyle(info.el).cssText);
-        } catch (e) {}
-      }
-    }, 5);
-
-    // slight visual lift
-    try { info.el.style.transform = 'translateY(-4px)'; } catch(e){}
-  });
-  calendar.on('eventDragStop', function(info) {
-    try { info.el.style.transform = 'translateY(0)'; } catch(e){}
-  });
-}
+// ✅ Ensure drag alignment matches sidebar & calendar
+calendar.on('eventDragStart', function(info) {
+  info.el.style.transform = 'translateY(-4px)';
+});
+calendar.on('eventDragStop', function(info) {
+  info.el.style.transform = 'translateY(0)';
+});
             }
 
 
@@ -821,8 +846,8 @@ Object.values(employees).forEach(emp => {
     '#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#14b8a6',
     '#ef4444', '#22c55e', '#eab308', '#0ea5e9', '#6366f1', '#84cc16',
     '#d946ef', '#0d9488', '#fb923c', '#a855f7', '#475569', '#f97316',
-    '#64748b', '#60a5fa', '#65a30d', '#f43f5e', '#0ea5e9', '#059669',
-    '#7c3aed', '#e11d48', '#9333ea', '#2563eb', '#9ca3af', '#15803d'
+    '#64748b', '#60a5fa', '#65a30d', '#f43f5e', '#059669', '#7c3aed',
+    '#e11d48', '#9333ea', '#2563eb', '#9ca3af', '#15803d'
   ];
 
   if (!employeeColors[emp.empNo]) {
@@ -878,11 +903,6 @@ document.querySelectorAll('#draggable-cards-container > div').forEach(card => {
   if (emp) card.dataset.empno = emp.empNo;
 });
 
-// ensure the pill markup preserves styles (already done) — no change here.
-// After generating pills, make sure each pill is marked draggable (defensive)
-document.querySelectorAll('#draggable-cards-container .fc-event-pill').forEach(pill => {
-  pill.setAttribute('draggable', 'true');
-});
             }
             
             // --- MODAL & UI LOGIC ---
