@@ -19,6 +19,7 @@ function getEmployeeColor(empNo) {
 
 // add variable to hold style for external-drags
 let __lastDraggedInlineStyle = '';
+let __lastDraggedEventColor = '';
 
 /* ====== MOVED HELPERS: make gradient/color helpers top-level so other code can use them ====== */
 function rgbToHsl(r, g, b) {
@@ -376,6 +377,13 @@ function loadFromLocalStorage() {
                           newEvent.setExtendedProp('id', Date.now().toString());
                         }
 
+                        // ensure the event stores the employee color and any inline style (so persistence & mirrors work)
+                        try {
+                          const color = getEmployeeColor(empNo);
+                          newEvent.setExtendedProp('_eventColor', color);
+                          if (__lastDraggedInlineStyle) newEvent.setExtendedProp('_inlineStyle', __lastDraggedInlineStyle);
+                        } catch (e) {}
+
                         const allEvents = calendar.getEvents();
                         const isDuplicate = allEvents.find(e => 
                             e.extendedProps.id !== newEvent.extendedProps.id &&
@@ -442,6 +450,9 @@ eventDidMount: function(info) {
 
   // Use any saved inline style attached during draggable creation/load
   const savedInline = info.event.extendedProps && info.event.extendedProps._inlineStyle;
+  const savedColor = info.event.extendedProps && info.event.extendedProps._eventColor;
+  const color = savedColor || employeeColors[empNo] || getEmployeeColor(empNo);
+
   if (savedInline && savedInline.trim()) {
     try {
       info.el.style.cssText += savedInline;
@@ -450,7 +461,6 @@ eventDidMount: function(info) {
     } catch (e) { /* ignore */ }
   } else {
     // fallback to per-employee flat colors (no gradients)
-    const color = employeeColors[empNo] || '#3b82f6';
     if (type === 'work') {
       try {
         info.el.style.setProperty('background-color', color, 'important');
@@ -480,6 +490,9 @@ eventDidMount: function(info) {
       }
     }
   }
+
+  // set CSS variable so mirrors / css that use --event-color match this event
+  try { info.el.style.setProperty('--event-color', color); } catch(e){}
 
   try {
     tippy(info.el, {
@@ -588,8 +601,16 @@ try {
           }
         }
 
+        // ensure event color is recorded so mirrors and persisted events can use it
+        try {
+          const dataColor = eventEl.dataset.eventColor;
+          parsed.extendedProps = parsed.extendedProps || {};
+          parsed.extendedProps._eventColor = dataColor || getEmployeeColor(parsed.extendedProps.empNo);
+        } catch (e) {}
+
         // store last dragged style (used for external drag preview)
         __lastDraggedInlineStyle = (parsed.extendedProps && parsed.extendedProps._inlineStyle) || '';
+        __lastDraggedEventColor = (parsed.extendedProps && parsed.extendedProps._eventColor) || '';
 
         eventEl._fcEventData = parsed;
         return parsed;
@@ -613,6 +634,7 @@ if (draggableCardsContainer) {
       try { return window.getComputedStyle(pill).cssText; } catch(e){ return ''; }
     })();
     __lastDraggedInlineStyle = s || __lastDraggedInlineStyle;
+    __lastDraggedEventColor = pill.dataset.eventColor || __lastDraggedEventColor;
     // small timeout to let FullCalendar create mirror element, then apply
     setTimeout(() => {
       const mirror = document.querySelector('.fc-mirror');
@@ -621,6 +643,9 @@ if (draggableCardsContainer) {
           // merge styles without clobbering other required FC inline props
           mirror.style.cssText += __lastDraggedInlineStyle;
         } catch (err) {}
+      }
+      if (mirror && __lastDraggedEventColor) {
+        try { mirror.style.setProperty('--event-color', __lastDraggedEventColor); } catch (e) {}
       }
     }, 5);
   }, { passive: true });
@@ -642,6 +667,14 @@ if (calendar && typeof calendar.on === 'function') {
           mirror.style.cssText += (info.el.getAttribute('style') || window.getComputedStyle(info.el).cssText);
         } catch (e) {}
       }
+
+      // set CSS variable used by .fc-mirror rules so mirror matches employee color
+      try {
+        const empNo = info.event.extendedProps && info.event.extendedProps.empNo;
+        const color = info.event.extendedProps && info.event.extendedProps._eventColor
+                      || (empNo ? (employeeColors[empNo] || getEmployeeColor(empNo)) : '');
+        if (color) mirror.style.setProperty('--event-color', color);
+      } catch (e) {}
     }, 5);
 
     // slight visual lift
@@ -804,6 +837,9 @@ Object.values(employees).forEach(emp => {
 // --- Assign or reuse color for employee ---
 const color = getEmployeeColor(emp.empNo);
 
+// attach color to extendedProps so draggable/event mirror can access it
+workEventData.extendedProps._eventColor = color;
+restEventData.extendedProps._eventColor = color;
 
   // --- Draggable Card UI ---
 const cardHtml = `
@@ -817,13 +853,15 @@ const cardHtml = `
         <div
           class="fc-event-pill fc-event-work px-3 py-1 text-xs font-medium rounded-full cursor-pointer select-none shadow-sm"
           data-event='${JSON.stringify(workEventData)}'
-          style="background-color:${getGradientFromBaseColor(color, 'work')}; color:#fff; border:none;">
+          data-event-color="${color}"
+          style="--event-color:${color}; background-color:${getGradientFromBaseColor(color, 'work')}; color:#fff; border:none;">
           🟦 Work
         </div>
         <div
           class="fc-event-pill fc-event-rest px-3 py-1 text-xs font-medium rounded-full cursor-pointer select-none shadow-sm"
           data-event='${JSON.stringify(restEventData)}'
-          style="background-color:${getGradientFromBaseColor(color, 'rest')}; color:${color}; border:2px solid ${color};">
+          data-event-color="${color}"
+          style="--event-color:${color}; background-color:${getGradientFromBaseColor(color, 'rest')}; color:${color}; border:2px solid ${color};">
           🔴 Rest
         </div>
       </div>
@@ -1280,7 +1318,10 @@ if (shiftSearchInput && shiftPresetSelect) {
                 confirmDeleteBtn.classList.add('bg-orange-600', 'hover:bg-orange-700', 'focus:ring-orange-500');
                 
                 deleteModal.classList.remove('hidden');
-                localStorage.clear();
+                // clear persisted storage (full wipe)
+                try { localStorage.clear(); } catch (e) {}
+                // also clear in-memory employee color map so colors are regenerated
+                employeeColors = {};
                 
                 confirmDeleteBtn.onclick = () => {
                     employees = {};
@@ -1293,6 +1334,9 @@ if (shiftSearchInput && shiftPresetSelect) {
                     if (conflictTableBody) conflictTableBody.innerHTML = '';
                     if (conflictsPlaceholder) conflictsPlaceholder.classList.remove('hidden');
                     updateStats(0);
+                    
+                    // persist cleared colors as well
+                    try { localStorage.setItem('employeeColors', JSON.stringify(employeeColors)); } catch(e){}
                     
                     closeModal(deleteModal);
                     deleteModal.querySelector('h3').textContent = "Delete Schedule Entry";
