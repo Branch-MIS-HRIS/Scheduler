@@ -377,49 +377,61 @@ function loadFromLocalStorage() {
 eventReceive: function(info) {
 
   const newEvent = info.event;
-  const { type, empNo, position } = newEvent.extendedProps; // this is the correct type
+  const { type, empNo, position } = newEvent.extendedProps;
   const dateStr = newEvent.startStr;
 
-  // ✅ Apply the correct pill color class right on drop
+  // Apply gradient and class immediately on drop
+  const color = employeeColors[empNo];
   if (type === "work") {
+    const grad = getGradientFromBaseColor(color, "work");
     newEvent.setProp("classNames", ["fc-event-pill", "fc-event-work"]);
+    newEvent.setExtendedProp("forceStyle", {
+      background: grad,
+      color: "#fff",
+      border: "none"
+    });
   } else if (type === "rest") {
+    const grad = getGradientFromBaseColor(color, "rest");
     newEvent.setProp("classNames", ["fc-event-pill", "fc-event-rest"]);
+    newEvent.setExtendedProp("forceStyle", {
+      background: grad,
+      color: color,
+      border: `2px solid ${color}`
+    });
   }
 
-  // ✅ Ensure the event has a unique id
+  // Unique ID
   try {
     newEvent.setExtendedProp('id', (crypto && crypto.randomUUID) ? crypto.randomUUID() : Date.now().toString());
   } catch (e) {
     newEvent.setExtendedProp('id', Date.now().toString());
   }
 
-  // ✅ Duplicate check logic (unchanged)
+  // Duplicate check
   const allEvents = calendar.getEvents();
   const isDuplicate = allEvents.find(e => 
-      e.extendedProps.id !== newEvent.extendedProps.id &&
-      e.startStr === dateStr &&
-      e.extendedProps.empNo === empNo &&
-      e.extendedProps.type === type
+    e.extendedProps.id !== newEvent.extendedProps.id &&
+    e.startStr === dateStr &&
+    e.extendedProps.empNo === empNo &&
+    e.extendedProps.type === type
   );
 
-                        if (isDuplicate) {
-                            showToast(`Duplicate entry blocked: ${employees[empNo] ? employees[empNo].name : empNo} already has a '${type}' day on this date.`, 'error');
-                            newEvent.remove();
-                            return;
-                        }
+  if (isDuplicate) {
+    showToast(`Duplicate entry blocked: ${employees[empNo] ? employees[empNo].name : empNo} already has a '${type}' day on this date.`, 'error');
+    newEvent.remove();
+    return;
+  }
 
-                        if (type === 'work') {
-  currentDroppingEvent = newEvent;
-  openShiftModal();
-} else {
-  // Keep the gradient & correct color
-  newEvent.setProp("classNames", ["fc-event-pill", "fc-event-rest"]);
-  runConflictDetection();
-  updateStats();
-  saveToLocalStorage();
-}
-                    },
+  if (type === 'work') {
+    currentDroppingEvent = newEvent;
+    openShiftModal();
+  } else {
+    runConflictDetection();
+    updateStats();
+    saveToLocalStorage();
+  }
+},
+
                     
                     /**
                      * Fired when an event is dragged and dropped *within* the calendar.
@@ -450,6 +462,13 @@ eventReceive: function(info) {
  * Fired after an event is rendered. Used for tooltips and styling.
  */
 eventDidMount: function(info) {
+  // Apply forceStyle if present (ensures drag/drop keeps gradient)
+if (info.event.extendedProps.forceStyle) {
+  Object.entries(info.event.extendedProps.forceStyle).forEach(([k,v]) => {
+    info.el.style.setProperty(k, v, 'important');
+  });
+}
+
   const { type, shiftCode, isConflict, empNo } = info.event.extendedProps;
   const emp = employees[empNo];
 
@@ -460,59 +479,6 @@ eventDidMount: function(info) {
     return;
   }
 
-  // 🔸 Generate gradient tints from a base hex color
-function getGradientFromBaseColor(hex, type = 'work') {
-  if (!hex || hex[0] !== '#') return '';
-  // Convert hex to RGB
-  const rgb = parseInt(hex.slice(1), 16);
-  const r = (rgb >> 16) & 255;
-  const g = (rgb >> 8) & 255;
-  const b = rgb & 255;
-  const hsl = rgbToHsl(r, g, b);
-  const [h, s, l] = hsl;
-
-  if (type === 'work') {
-    return `linear-gradient(135deg, hsl(${h}, ${Math.round(s * 100)}%, ${Math.max(25, Math.round(l * 100) - 10)}%), hsl(${h}, ${Math.round(s * 100)}%, ${Math.min(70, Math.round(l * 100) + 10)}%))`;
-  } else {
-    return `linear-gradient(135deg, hsl(${h}, ${Math.round(s * 100)}%, ${Math.min(90, Math.round(l * 100) + 20)}%), hsl(${h}, ${Math.round(s * 100)}%, ${Math.min(95, Math.round(l * 100) + 25)}%))`;
-  }
-}
-
-/* ====== MOVED HELPERS: make gradient/color helpers top-level so other code can use them ====== */
-function rgbToHsl(r, g, b) {
-  r /= 255; g /= 255; b /= 255;
-  const max = Math.max(r, g, b), min = Math.min(r, g, b);
-  let h, s, l = (max + min) / 2;
-  if (max === min) { h = s = 0; }
-  else {
-    const d = max - min;
-    s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
-    switch (max) {
-      case r: h = (g - b) / d + (g < b ? 6 : 0); break;
-      case g: h = (b - r) / d + 2; break;
-      case b: h = (r - g) / d + 4; break;
-    }
-    h /= 6;
-  }
-  return [Math.round(h * 360), s, l];
-}
-
-function getGradientFromBaseColor(hex, type = 'work') {
-  if (!hex || hex[0] !== '#') return '';
-  // Convert hex to RGB
-  const rgb = parseInt(hex.slice(1), 16);
-  const r = (rgb >> 16) & 255;
-  const g = (rgb >> 8) & 255;
-  const b = rgb & 255;
-  const hsl = rgbToHsl(r, g, b);
-  const [h, s, l] = hsl;
-
-  if (type === 'work') {
-    return `linear-gradient(135deg, hsl(${h}, ${Math.round(s * 100)}%, ${Math.max(25, Math.round(l * 100) - 10)}%), hsl(${h}, ${Math.round(s * 100)}%, ${Math.min(70, Math.round(l * 100) + 10)}%))`;
-  } else {
-    return `linear-gradient(135deg, hsl(${h}, ${Math.round(s * 100)}%, ${Math.min(90, Math.round(l * 100) + 20)}%), hsl(${h}, ${Math.round(s * 100)}%, ${Math.min(95, Math.round(l * 100) + 25)}%))`;
-  }
-}
 
 // --- Persistent Unique Employee Color Assignment (solid vs border) ---
 const baseColors = [
