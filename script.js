@@ -350,281 +350,278 @@ function loadFromLocalStorage() {
   }
 }
             
-            /**
-             * Initializes the FullCalendar instance
-             */
-            function initializeCalendar() {
-                if (!calendarEl) return;
-                calendar = new FullCalendar.Calendar(calendarEl, {
-                    initialView: 'dayGridMonth',
-                    headerToolbar: {
-                        left: 'prev,next today',
-                        center: 'title',
-                        right: 'dayGridMonth'
-                    },
-                    editable: true,
-                    droppable: true,
-                    slotEventOverlap: false,
-                    eventOrder: 'title',
-                    dayMaxEvents: 4,
-                    weekends: true,
-                    
-                    // --- Event Handlers ---
+function initializeCalendar() {
+  if (!calendarEl) return;
 
-                    /**
-                     * Fired when an external element is dropped on the calendar.
-                     */
-eventReceive: function(info) {
+  calendar = new FullCalendar.Calendar(calendarEl, {
+    initialView: 'dayGridMonth',
+    editable: true,
+    droppable: true,
+    selectable: true,
+    dayMaxEvents: true,
+    height: 'auto',
+    headerToolbar: {
+      left: 'prev,next today',
+      center: 'title',
+      right: 'dayGridMonth,dayGridWeek,dayGridDay'
+    },
 
-  const newEvent = info.event;
-  const { type, empNo, position } = newEvent.extendedProps;
-  const dateStr = newEvent.startStr;
+    // ---------- Event handlers (preserved exactly as before) ----------
+    eventReceive: function(info) {
 
-  // Apply gradient and class immediately on drop
-  const color = employeeColors[empNo];
-  if (type === "work") {
-    const grad = getGradientFromBaseColor(color, "work");
-    newEvent.setProp("classNames", ["fc-event-pill", "fc-event-work"]);
-    newEvent.setExtendedProp("forceStyle", {
-      background: grad,
-      color: "#fff",
-      border: "none"
-    });
-  } else if (type === "rest") {
-    const grad = getGradientFromBaseColor(color, "rest");
-    newEvent.setProp("classNames", ["fc-event-pill", "fc-event-rest"]);
-    newEvent.setExtendedProp("forceStyle", {
-      background: grad,
-      color: color,
-      border: `2px solid ${color}`
-    });
-  }
+      const newEvent = info.event;
+      const { type, empNo } = newEvent.extendedProps;
+      const dateStr = newEvent.startStr;
 
-  // Unique ID
-  try {
-    newEvent.setExtendedProp('id', (crypto && crypto.randomUUID) ? crypto.randomUUID() : Date.now().toString());
-  } catch (e) {
-    newEvent.setExtendedProp('id', Date.now().toString());
-  }
+      // ✅ Get employee color immediately
+      const color = employeeColors[empNo];
 
-  // Duplicate check
-  const allEvents = calendar.getEvents();
-  const isDuplicate = allEvents.find(e => 
-    e.extendedProps.id !== newEvent.extendedProps.id &&
-    e.startStr === dateStr &&
-    e.extendedProps.empNo === empNo &&
-    e.extendedProps.type === type
-  );
+      if (type === "work") {
+        const grad = getGradientFromBaseColor(color, "work");
+        newEvent.setProp("classNames", ["fc-event-pill", "fc-event-work"]);
+        newEvent.setExtendedProp("forceStyle", {
+          background: grad,
+          backgroundImage: "none",
+          color: "#fff",
+          border: "none"
+        });
 
-  if (isDuplicate) {
-    showToast(`Duplicate entry blocked: ${employees[empNo] ? employees[empNo].name : empNo} already has a '${type}' day on this date.`, 'error');
-    newEvent.remove();
-    return;
-  }
+      } else if (type === "rest") {
+        const grad = getGradientFromBaseColor(color, "rest");
+        newEvent.setProp("classNames", ["fc-event-pill", "fc-event-rest"]);
+        newEvent.setExtendedProp("forceStyle", {
+          background: grad,
+          backgroundImage: "none",
+          color: color,
+          border: `2px solid ${color}`
+        });
+      }
 
-  if (type === 'work') {
-    currentDroppingEvent = newEvent;
-    openShiftModal();
-  } else {
-    runConflictDetection();
-    updateStats();
-    saveToLocalStorage();
-  }
-},
+      // ✅ Ensure unique ID
+      try {
+        newEvent.setExtendedProp('id', (crypto && crypto.randomUUID) ? crypto.randomUUID() : Date.now().toString());
+      } catch (e) {
+        newEvent.setExtendedProp('id', Date.now().toString());
+      }
 
-                    
-                    /**
-                     * Fired when an event is dragged and dropped *within* the calendar.
-                     */
-                    eventDrop: function(info) {
-                        runConflictDetection();
-                        updateStats();
-                        saveToLocalStorage();
-                    },
-                    
-                    /**
-                     * Fired when an event is removed.
-                     */
-                    eventRemove: function(info) {
-                        runConflictDetection();
-                        updateStats();
-                        saveToLocalStorage();
-                    },
+      // ✅ Duplicate check
+      const allEvents = calendar.getEvents();
+      const isDuplicate = allEvents.find(e => 
+        e.extendedProps.id !== newEvent.extendedProps.id &&
+        e.startStr === dateStr &&
+        e.extendedProps.empNo === empNo &&
+        e.extendedProps.type === type
+      );
 
-                    /**
-                     * Fired when an event is clicked.
-                     */
-                    eventClick: function(info) {
-                        openDeleteModal(info.event);
-                    },
+      if (isDuplicate) {
+        showToast(`Duplicate entry blocked: ${employees[empNo] ? employees[empNo].name : empNo} already has a '${type}' day on this date.`, 'error');
+        newEvent.remove();
+        return;
+      }
 
-/**
- * Fired after an event is rendered. Used for tooltips and styling.
- */
-eventDidMount: function(info) {
-  // Apply forceStyle if present (ensures drag/drop keeps gradient)
-if (info.event.extendedProps.forceStyle) {
-  Object.entries(info.event.extendedProps.forceStyle).forEach(([k,v]) => {
-    info.el.style.setProperty(k, v, 'important');
-  });
-}
+      // ✅ Work → Open Shift Modal
+      if (type === 'work') {
+        currentDroppingEvent = newEvent;
+        openShiftModal();
+      } else {
+        // ✅ Rest is auto-accepted
+        runConflictDetection();
+        updateStats();
+        saveToLocalStorage();
+      }
 
-  const { type, shiftCode, isConflict, empNo } = info.event.extendedProps;
-  const emp = employees[empNo];
+    },
 
-  // Guard: if empNo is missing, avoid creating/assigning colors and hide the event early
-  if (!empNo) {
-    console.warn('eventDidMount: missing empNo for event', info.event && info.event.id);
-    info.el.style.display = 'none';
-    return;
-  }
+    /**
+     * Fired when an event is dragged and dropped *within* the calendar.
+     */
+    eventDrop: function(info) {
+      runConflictDetection();
+      updateStats();
+      saveToLocalStorage();
+    },
+
+    /**
+     * Fired when an event is removed.
+     */
+    eventRemove: function(info) {
+      runConflictDetection();
+      updateStats();
+      saveToLocalStorage();
+    },
+
+    /**
+     * Fired when an event is clicked.
+     */
+    eventClick: function(info) {
+      openDeleteModal(info.event);
+    },
+
+    /**
+     * Fired after an event is rendered. Used for tooltips and styling.
+     */
+    eventDidMount: function(info) {
+      // Apply forceStyle if present (ensures drag/drop keeps gradient)
+      if (info.event.extendedProps.forceStyle) {
+        Object.entries(info.event.extendedProps.forceStyle).forEach(([k,v]) => {
+          info.el.style.setProperty(k, v, 'important');
+        });
+      }
+
+      const { type, shiftCode, isConflict, empNo } = info.event.extendedProps;
+      const emp = employees[empNo];
+
+      // Guard: if empNo is missing, avoid creating/assigning colors and hide the event early
+      if (!empNo) {
+        console.warn('eventDidMount: missing empNo for event', info.event && info.event.id);
+        info.el.style.display = 'none';
+        return;
+      }
+
+      // --- Persistent Unique Employee Color Assignment (solid vs border) ---
+      const baseColors = [
+        '#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#14b8a6',
+        '#ef4444', '#22c55e', '#eab308', '#0ea5e9', '#6366f1', '#84cc16',
+        '#d946ef', '#0d9488', '#fb923c', '#a855f7', '#475569', '#f97316',
+        '#64748b', '#60a5fa', '#65a30d', '#f43f5e', '#0ea5e9', '#059669',
+        '#7c3aed', '#e11d48', '#9333ea', '#2563eb', '#9ca3af', '#15803d'
+      ];
+
+      if (!employeeColors[empNo]) {
+        const usedColors = Object.values(employeeColors);
+        const availableColors = baseColors.filter(c => !usedColors.includes(c));
+        let color;
+        if (availableColors.length) {
+          color = availableColors[0];
+        } else {
+          // deterministic fallback when all base colors are used:
+          // hash the employee number/string to pick a color index
+          const key = String(empNo || '');
+          let hash = 0;
+          for (let i = 0; i < key.length; i++) {
+            hash = ((hash << 5) - hash) + key.charCodeAt(i);
+            hash |= 0; // convert to 32bit int
+          }
+          color = baseColors[Math.abs(hash) % baseColors.length];
+        }
+        employeeColors[empNo] = color;
+        try { localStorage.setItem('employeeColors', JSON.stringify(employeeColors)); } catch (e) {}
+      }
+      const color = employeeColors[empNo];
 
 
-// --- Persistent Unique Employee Color Assignment (solid vs border) ---
-const baseColors = [
-  '#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#14b8a6',
-  '#ef4444', '#22c55e', '#eab308', '#0ea5e9', '#6366f1', '#84cc16',
-  '#d946ef', '#0d9488', '#fb923c', '#a855f7', '#475569', '#f97316',
-  '#64748b', '#60a5fa', '#65a30d', '#f43f5e', '#0ea5e9', '#059669',
-  '#7c3aed', '#e11d48', '#9333ea', '#2563eb', '#9ca3af', '#15803d'
-];
+      if (type === 'work') {
+        // 🔸 Gradient-based background for Work type
+        try {
+          const grad = getGradientFromBaseColor(color, 'work');
+          info.el.style.setProperty('background', grad, 'important');
+          info.el.style.setProperty('color', '#fff', 'important');
+          info.el.style.setProperty('border', 'none', 'important');
 
-if (!employeeColors[empNo]) {
-  const usedColors = Object.values(employeeColors);
-  const availableColors = baseColors.filter(c => !usedColors.includes(c));
-  let color;
-  if (availableColors.length) {
-    color = availableColors[0];
-  } else {
-    // deterministic fallback when all base colors are used:
-    // hash the employee number/string to pick a color index
-    const key = String(empNo || '');
-    let hash = 0;
-    for (let i = 0; i < key.length; i++) {
-      hash = ((hash << 5) - hash) + key.charCodeAt(i);
-      hash |= 0; // convert to 32bit int
+          const inner = info.el.querySelector('.fc-event-main-frame') || info.el;
+          inner.style.setProperty('background', grad, 'important');
+          inner.style.setProperty('color', '#fff', 'important');
+        } catch (e) {
+          // Fallback flat color
+          info.el.style.backgroundColor = color;
+          info.el.style.backgroundImage = 'none';
+          info.el.style.color = '#fff';
+          info.el.style.border = 'none';
+          const inner = info.el.querySelector('.fc-event-main-frame') || info.el;
+          inner.style.backgroundColor = color;
+          inner.style.backgroundImage = 'none';
+          inner.style.color = '#fff';
+        }
+      } else if (type === 'rest') {
+        // 🔸 Gradient-based background for Rest type
+        try {
+          const grad = getGradientFromBaseColor(color, 'rest');
+          info.el.style.setProperty('background', grad, 'important');
+          info.el.style.setProperty('color', color, 'important');
+          info.el.style.setProperty('border', `2px solid ${color}`, 'important');
+
+          const inner = info.el.querySelector('.fc-event-main-frame') || info.el;
+          inner.style.setProperty('background', grad, 'important');
+          inner.style.setProperty('color', color, 'important');
+          inner.style.setProperty('border', `2px solid ${color}`, 'important');
+        } catch (e) {
+          // Fallback flat color
+          info.el.style.backgroundColor = '#fff';
+          info.el.style.backgroundImage = 'none';
+          info.el.style.border = `2px solid ${color}`;
+          info.el.style.color = color;
+          const inner = info.el.querySelector('.fc-event-main-frame') || info.el;
+          inner.style.backgroundColor = '#fff';
+          inner.style.backgroundImage = 'none';
+          inner.style.border = `2px solid ${color}`;
+          inner.style.color = color;
+        }
+      }
+
+      try {
+        tippy(info.el, {
+          content: `
+            <div class='text-sm'>
+              <div><strong>Employee #:</strong> ${emp ? emp.empNo : empNo}</div>
+              <div><strong>Position:</strong> ${emp ? emp.position : 'N/A'}</div>
+              <div><strong>Shift:</strong> ${type === 'work' ? 'Work' : 'Rest'}</div>
+            </div>
+          `,
+          allowHTML: true,
+          theme: 'light-border',
+          placement: 'top',
+        });
+      } catch (e) {}
+
+      if (!emp) {
+        console.error(`Event ${info.event.id || ''} has invalid employee data (empNo: ${empNo}). Hiding event.`);
+        info.el.style.display = 'none';
+        return;
+      }
+
+      info.el.classList.add(type === 'work' ? 'fc-event-work' : 'fc-event-rest');
+
+      if (isConflict) {
+        info.el.classList.add('fc-event-conflict');
+      } else {
+        info.el.classList.remove('fc-event-conflict');
+      }
+
+      const shiftInfo = shiftCode ? ` (${shiftCode})` : '';
+      const title = `${info.event.title} (${emp.position})\nType: ${type.charAt(0).toUpperCase() + type.slice(1)}${shiftInfo}`;
+      info.el.title = title;
+    },
+
+    /**
+     * Customizes the inner content of the event.
+     */
+    eventContent: function(arg) {
+      const { shiftCode } = arg.event.extendedProps;
+      const shiftHtml = shiftCode ? `<div class="text-xs opacity-90">${shiftCode}</div>` : '';
+      return {
+        html: `
+          <div class="fc-event-main-frame">
+            <div class="fc-event-title-container">
+              <div class="fc-event-title fc-sticky">${arg.event.title}</div>
+            </div>
+            ${shiftHtml}
+          </div>`
+      };
+    },
+
+    /**
+     * Style weekend days
+     */
+    dayCellClassNames: function(arg) {
+      if (arg.date.getDay() === 0 || arg.date.getDay() === 6) {
+        return 'fc-day-sat-sun';
+      }
+      return null;
     }
-    color = baseColors[Math.abs(hash) % baseColors.length];
-  }
-  employeeColors[empNo] = color;
-  try { localStorage.setItem('employeeColors', JSON.stringify(employeeColors)); } catch (e) {}
+  });
+
+  calendar.render();
 }
-const color = employeeColors[empNo];
-
-
-if (type === 'work') {
-  // 🔸 Gradient-based background for Work type
-  try {
-    const grad = getGradientFromBaseColor(color, 'work');
-    info.el.style.setProperty('background', grad, 'important');
-    info.el.style.setProperty('color', '#fff', 'important');
-    info.el.style.setProperty('border', 'none', 'important');
-
-    const inner = info.el.querySelector('.fc-event-main-frame') || info.el;
-    inner.style.setProperty('background', grad, 'important');
-    inner.style.setProperty('color', '#fff', 'important');
-  } catch (e) {
-    // Fallback flat color
-    info.el.style.backgroundColor = color;
-    info.el.style.backgroundImage = 'none';
-    info.el.style.color = '#fff';
-    info.el.style.border = 'none';
-    const inner = info.el.querySelector('.fc-event-main-frame') || info.el;
-    inner.style.backgroundColor = color;
-    inner.style.backgroundImage = 'none';
-    inner.style.color = '#fff';
-  }
-} else if (type === 'rest') {
-  // 🔸 Gradient-based background for Rest type
-  try {
-    const grad = getGradientFromBaseColor(color, 'rest');
-    info.el.style.setProperty('background', grad, 'important');
-    info.el.style.setProperty('color', color, 'important');
-    info.el.style.setProperty('border', `2px solid ${color}`, 'important');
-
-    const inner = info.el.querySelector('.fc-event-main-frame') || info.el;
-    inner.style.setProperty('background', grad, 'important');
-    inner.style.setProperty('color', color, 'important');
-    inner.style.setProperty('border', `2px solid ${color}`, 'important');
-  } catch (e) {
-    // Fallback flat color
-    info.el.style.backgroundColor = '#fff';
-    info.el.style.backgroundImage = 'none';
-    info.el.style.border = `2px solid ${color}`;
-    info.el.style.color = color;
-    const inner = info.el.querySelector('.fc-event-main-frame') || info.el;
-    inner.style.backgroundColor = '#fff';
-    inner.style.backgroundImage = 'none';
-    inner.style.border = `2px solid ${color}`;
-    inner.style.color = color;
-  }
-}
-
-
-  try {
-    tippy(info.el, {
-      content: `
-        <div class='text-sm'>
-          <div><strong>Employee #:</strong> ${emp ? emp.empNo : empNo}</div>
-          <div><strong>Position:</strong> ${emp ? emp.position : 'N/A'}</div>
-          <div><strong>Shift:</strong> ${type === 'work' ? 'Work' : 'Rest'}</div>
-        </div>
-      `,
-      allowHTML: true,
-      theme: 'light-border',
-      placement: 'top',
-    });
-  } catch (e) {}
-
-  if (!emp) {
-    console.error(`Event ${info.event.id || ''} has invalid employee data (empNo: ${empNo}). Hiding event.`);
-    info.el.style.display = 'none';
-    return;
-  }
-
-  info.el.classList.add(type === 'work' ? 'fc-event-work' : 'fc-event-rest');
-
-  if (isConflict) {
-    info.el.classList.add('fc-event-conflict');
-  } else {
-    info.el.classList.remove('fc-event-conflict');
-  }
-
-  const shiftInfo = shiftCode ? ` (${shiftCode})` : '';
-  const title = `${info.event.title} (${emp.position})\nType: ${type.charAt(0).toUpperCase() + type.slice(1)}${shiftInfo}`;
-  info.el.title = title;
-},
-
-                    /**
-                     * Customizes the inner content of the event.
-                     */
-                    eventContent: function(arg) {
-                        const { shiftCode } = arg.event.extendedProps;
-                        const shiftHtml = shiftCode ? `<div class="text-xs opacity-90">${shiftCode}</div>` : '';
-                        return {
-                            html: `
-                                <div class="fc-event-main-frame">
-                                    <div class="fc-event-title-container">
-                                        <div class="fc-event-title fc-sticky">${arg.event.title}</div>
-                                    </div>
-                                    ${shiftHtml}
-                                </div>`
-                        };
-                    },
-
-                    /**
-                     * Style weekend days
-                     */
-                    dayCellClassNames: function(arg) {
-                        if (arg.date.getDay() === 0 || arg.date.getDay() === 6) {
-                            return 'fc-day-sat-sun';
-                        }
-                        return null;
-                    }
-                });
-                
-                calendar.render();
-            }
             
             /**
              * Initializes the Draggable instance for the sidebar cards.
