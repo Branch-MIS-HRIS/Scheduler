@@ -517,13 +517,11 @@ if (type === 'work') {
   try {
     const grad = getGradientFromBaseColor(color, 'work');
     info.el.style.setProperty('background', grad, 'important');
-    info.el.style.setProperty('background-image', 'none', 'important');
     info.el.style.setProperty('color', '#fff', 'important');
     info.el.style.setProperty('border', 'none', 'important');
 
     const inner = info.el.querySelector('.fc-event-main-frame') || info.el;
     inner.style.setProperty('background', grad, 'important');
-    inner.style.setProperty('background-image', 'none', 'important');
     inner.style.setProperty('color', '#fff', 'important');
   } catch (e) {
     // Fallback flat color
@@ -541,13 +539,11 @@ if (type === 'work') {
   try {
     const grad = getGradientFromBaseColor(color, 'rest');
     info.el.style.setProperty('background', grad, 'important');
-    info.el.style.setProperty('background-image', 'none', 'important');
     info.el.style.setProperty('color', color, 'important');
     info.el.style.setProperty('border', `2px solid ${color}`, 'important');
 
     const inner = info.el.querySelector('.fc-event-main-frame') || info.el;
     inner.style.setProperty('background', grad, 'important');
-    inner.style.setProperty('background-image', 'none', 'important');
     inner.style.setProperty('color', color, 'important');
     inner.style.setProperty('border', `2px solid ${color}`, 'important');
   } catch (e) {
