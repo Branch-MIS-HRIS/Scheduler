@@ -939,40 +939,78 @@ if (shiftSearchInput && shiftPresetSelect) {
 }
             
             function handleSaveShift() {
-              let preset = '';
-              try {
-                preset = shiftSelect ? (shiftSelect.getValue() || shiftPresetSelect.value) : (shiftPresetSelect ? shiftPresetSelect.value : '');
-              } catch (e) {
-                preset = shiftPresetSelect ? shiftPresetSelect.value : '';
-              }
-            
-              const custom = shiftCustomInput ? shiftCustomInput.value.trim() : '';
-            
-              if (!preset && !custom && window.lastUsedShiftCode) {
-                preset = window.lastUsedShiftCode;
-              }
-            
-              const shiftCode = custom || preset;
-            
-              if (!shiftCode) {
-                showToast('Please select a preset or enter a custom shift code.', 'warn');
-                return;
-              }
-            
-              window.lastUsedShiftCode = shiftCode;
-            
-              const cleanCode = String(shiftCode).split(' ')[0];
-              if (currentDroppingEvent) {
-                currentDroppingEvent.setExtendedProp('shiftCode', cleanCode);
-                currentDroppingEvent.setProp('classNames', ['fc-event-work']);
-                runConflictDetection();
-                updateStats();
-                saveToLocalStorage();
-              }
-            
-              if (shiftModal) closeModal(shiftModal);
-              currentDroppingEvent = null;
-            }
+  let preset = '';
+  try {
+    preset = shiftSelect ? (shiftSelect.getValue() || shiftPresetSelect.value) : (shiftPresetSelect ? shiftPresetSelect.value : '');
+  } catch (e) {
+    preset = shiftPresetSelect ? shiftPresetSelect.value : '';
+  }
+
+  const custom = shiftCustomInput ? shiftCustomInput.value.trim() : '';
+
+  if (!preset && !custom && window.lastUsedShiftCode) {
+    preset = window.lastUsedShiftCode;
+  }
+
+  const shiftCode = custom || preset;
+
+  if (!shiftCode) {
+    showToast('Please select a preset or enter a custom shift code.', 'warn');
+    return;
+  }
+
+  window.lastUsedShiftCode = shiftCode;
+
+  const cleanCode = String(shiftCode).split(' ')[0];
+  if (currentDroppingEvent) {
+    // --- Ensure the event stores / reapplies the employee color and inline style ---
+    try {
+      const empNo = currentDroppingEvent.extendedProps && currentDroppingEvent.extendedProps.empNo;
+      const color = empNo ? (employeeColors[empNo] || getEmployeeColor(empNo)) : null;
+
+      // Persist shift code
+      currentDroppingEvent.setExtendedProp('shiftCode', cleanCode);
+
+      // Mark as work and persist the event color so future mirrors / renders use it
+      currentDroppingEvent.setProp('classNames', ['fc-event-work']);
+      if (color) {
+        currentDroppingEvent.setExtendedProp('_eventColor', color);
+        // set visual props that FullCalendar will respect and also make sure inline styles override stylesheet rules
+        try {
+          currentDroppingEvent.setProp('backgroundColor', color);
+          currentDroppingEvent.setProp('textColor', '#ffffff');
+        } catch (e) { /* some FC builds may not accept those props — still continue */ }
+
+        // also apply inline style immediately to the element (defensive)
+        if (currentDroppingEvent.el) {
+          try {
+            currentDroppingEvent.el.style.setProperty('background-color', color, 'important');
+            currentDroppingEvent.el.style.setProperty('color', '#fff', 'important');
+            currentDroppingEvent.el.style.removeProperty('border');
+            const inner = currentDroppingEvent.el.querySelector('.fc-event-main-frame') || currentDroppingEvent.el;
+            inner.style.setProperty('background-color', color, 'important');
+            inner.style.setProperty('color', '#fff', 'important');
+          } catch (e) {}
+        }
+
+        // store an inline snapshot so future drag-mirrors keep the same look
+        currentDroppingEvent.setExtendedProp('_inlineStyle', `background-color:${color}; color:#fff; border:none;`);
+      } else {
+        // fallback: ensure classNames still set
+        currentDroppingEvent.setProp('classNames', ['fc-event-work']);
+      }
+
+      runConflictDetection();
+      updateStats();
+      saveToLocalStorage();
+    } catch (err) {
+      console.warn('handleSaveShift: styling apply error', err);
+    }
+  }
+
+  if (shiftModal) closeModal(shiftModal);
+  currentDroppingEvent = null;
+}
 
             function openDeleteModal(event) {
                 if (!deleteModal || !deleteModalSummary) return;
