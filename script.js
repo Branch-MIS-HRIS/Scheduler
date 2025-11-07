@@ -629,24 +629,32 @@ if (draggableCardsContainer) {
   draggableCardsContainer.addEventListener('dragstart', function (e) {
     const pill = e.target.closest && e.target.closest('.fc-event-pill');
     if (!pill) return;
+
     // prefer inline attribute else computed style string
     const s = pill.getAttribute('style') || (() => {
       try { return window.getComputedStyle(pill).cssText; } catch(e){ return ''; }
     })();
+
+    // parse type from data-event if present (more reliable than dataset)
+    let eventType = pill.classList.contains('fc-event-rest') ? 'rest' : 'work';
+    try {
+      const raw = pill.getAttribute('data-event');
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed && parsed.extendedProps && parsed.extendedProps.type) eventType = parsed.extendedProps.type;
+      }
+    } catch (err) {}
+
     __lastDraggedInlineStyle = s || __lastDraggedInlineStyle;
     __lastDraggedEventColor = pill.dataset.eventColor || __lastDraggedEventColor;
+
     // small timeout to let FullCalendar create mirror element, then apply
     setTimeout(() => {
       const mirror = document.querySelector('.fc-mirror');
-      if (mirror && __lastDraggedInlineStyle) {
-        try {
-          // merge styles without clobbering other required FC inline props
-          mirror.style.cssText += __lastDraggedInlineStyle;
-        } catch (err) {}
-      }
-      if (mirror && __lastDraggedEventColor) {
-        try { mirror.style.setProperty('--event-color', __lastDraggedEventColor); } catch (e) {}
-      }
+      if (!mirror) return;
+
+      // Explicitly enforce class + styles so mirror matches the pill type and color immediately
+      applyMirrorStyle(mirror, eventType, __lastDraggedEventColor, __lastDraggedInlineStyle);
     }, 5);
   }, { passive: true });
 }
@@ -658,23 +666,20 @@ if (calendar && typeof calendar.on === 'function') {
     setTimeout(() => {
       const mirror = document.querySelector('.fc-mirror');
       if (!mirror) return;
-      // prefer explicit saved inline style on the event
-      const saved = info.event.extendedProps && info.event.extendedProps._inlineStyle;
-      if (saved) {
-        mirror.style.cssText += saved;
-      } else if (info.el) {
-        try {
-          mirror.style.cssText += (info.el.getAttribute('style') || window.getComputedStyle(info.el).cssText);
-        } catch (e) {}
-      }
 
-      // set CSS variable used by .fc-mirror rules so mirror matches employee color
-      try {
-        const empNo = info.event.extendedProps && info.event.extendedProps.empNo;
-        const color = info.event.extendedProps && info.event.extendedProps._eventColor
+      // determine type & saved styles
+      const saved = info.event.extendedProps && info.event.extendedProps._inlineStyle;
+      const type = info.event.extendedProps && info.event.extendedProps.type ? info.event.extendedProps.type : 'work';
+      const empNo = info.event.extendedProps && info.event.extendedProps.empNo;
+      const savedColor = info.event.extendedProps && info.event.extendedProps._eventColor
                       || (empNo ? (employeeColors[empNo] || getEmployeeColor(empNo)) : '');
-        if (color) mirror.style.setProperty('--event-color', color);
-      } catch (e) {}
+
+      // apply saved explicit snapshot if present, otherwise use computed style
+      const inlineSnapshot = saved || (info.el ? (info.el.getAttribute('style') || (() => {
+        try { return window.getComputedStyle(info.el).cssText; } catch(e){ return ''; }
+      })()) : '');
+
+      applyMirrorStyle(mirror, type, savedColor, inlineSnapshot);
     }, 5);
 
     // slight visual lift
