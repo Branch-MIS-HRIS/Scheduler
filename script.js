@@ -28,21 +28,12 @@ function rgbToHsl(r, g, b) {
   return [Math.round(h * 360), s, l];
 }
 
+// REPLACE getGradientFromBaseColor with a simpler helper that returns flat colors
 function getGradientFromBaseColor(hex, type = 'work') {
-  if (!hex || hex[0] !== '#') return '';
-  // Convert hex to RGB
-  const rgb = parseInt(hex.slice(1), 16);
-  const r = (rgb >> 16) & 255;
-  const g = (rgb >> 8) & 255;
-  const b = rgb & 255;
-  const hsl = rgbToHsl(r, g, b);
-  const [h, s, l] = hsl;
-
-  if (type === 'work') {
-    return `linear-gradient(135deg, hsl(${h}, ${Math.round(s * 100)}%, ${Math.max(25, Math.round(l * 100) - 10)}%), hsl(${h}, ${Math.round(s * 100)}%, ${Math.min(70, Math.round(l * 100) + 10)}%))`;
-  } else {
-    return `linear-gradient(135deg, hsl(${h}, ${Math.round(s * 100)}%, ${Math.min(90, Math.round(l * 100) + 20)}%), hsl(${h}, ${Math.round(s * 100)}%, ${Math.min(95, Math.round(l * 100) + 25)}%))`;
-  }
+  // return a plain color for 'work' and white for 'rest' (rest uses border + text color)
+  if (!hex) return type === 'work' ? '#3b82f6' : '#ffffff';
+  if (type === 'work') return hex;
+  return '#ffffff';
 }
 
             // --- COPY / PASTE SUPPORT ---
@@ -311,8 +302,8 @@ function loadFromLocalStorage() {
           extendedProps: { type: 'rest', empNo: emp.empNo, position: emp.position }
         };
 
-        const workStyle = `background:${getGradientFromBaseColor(color, 'work')}; color:#fff; border:none;`;
-        const restStyle = `background:${getGradientFromBaseColor(color, 'rest')}; color:${color}; border:2px solid ${color};`;
+        const workStyle = `background-color: ${getGradientFromBaseColor(color, 'work')}; color:#fff; border:none;`;
+        const restStyle = `background-color: ${getGradientFromBaseColor(color, 'rest')}; color:${color}; border:2px solid ${color};`;
 
         const cardHtml = `
           <div class="p-3 bg-white rounded-lg shadow-sm border border-gray-200" data-empno="${emp.empNo}">
@@ -456,22 +447,20 @@ eventDidMount: function(info) {
   const savedInline = info.event.extendedProps && info.event.extendedProps._inlineStyle;
   if (savedInline && savedInline.trim()) {
     try {
-      // apply to host element and main-frame for consistent look
       info.el.style.cssText += savedInline;
       const inner = info.el.querySelector('.fc-event-main-frame') || info.el;
       inner.style.cssText += savedInline;
     } catch (e) { /* ignore */ }
   } else {
-    // fallback to per-employee color gradients (existing logic)
+    // fallback to per-employee flat colors (no gradients)
     const color = employeeColors[empNo] || '#3b82f6';
     if (type === 'work') {
-      const grad = getGradientFromBaseColor(color, 'work');
       try {
-        info.el.style.setProperty('background', grad, 'important');
+        info.el.style.setProperty('background-color', color, 'important');
         info.el.style.setProperty('color', '#fff', 'important');
         info.el.style.setProperty('border', 'none', 'important');
         const inner = info.el.querySelector('.fc-event-main-frame') || info.el;
-        inner.style.setProperty('background', grad, 'important');
+        inner.style.setProperty('background-color', color, 'important');
         inner.style.setProperty('color', '#fff', 'important');
       } catch (e) {
         info.el.style.backgroundColor = color;
@@ -479,17 +468,16 @@ eventDidMount: function(info) {
         info.el.style.border = 'none';
       }
     } else if (type === 'rest') {
-      const grad = getGradientFromBaseColor(color, 'rest');
       try {
-        info.el.style.setProperty('background', grad, 'important');
+        info.el.style.setProperty('background-color', '#ffffff', 'important');
         info.el.style.setProperty('color', color, 'important');
         info.el.style.setProperty('border', `2px solid ${color}`, 'important');
         const inner = info.el.querySelector('.fc-event-main-frame') || info.el;
-        inner.style.setProperty('background', grad, 'important');
+        inner.style.setProperty('background-color', '#ffffff', 'important');
         inner.style.setProperty('color', color, 'important');
         inner.style.setProperty('border', `2px solid ${color}`, 'important');
       } catch (e) {
-        info.el.style.backgroundColor = '#fff';
+        info.el.style.backgroundColor = '#ffffff';
         info.el.style.border = `2px solid ${color}`;
         info.el.style.color = color;
       }
@@ -847,13 +835,13 @@ const cardHtml = `
         <div
           class="fc-event-pill fc-event-work px-3 py-1 text-xs font-medium rounded-full cursor-pointer select-none shadow-sm"
           data-event='${JSON.stringify(workEventData)}'
-          style="background:${getGradientFromBaseColor(color, 'work')}; color:#fff; border:none;">
+          style="background-color:${getGradientFromBaseColor(color, 'work')}; color:#fff; border:none;">
           🟦 Work
         </div>
         <div
           class="fc-event-pill fc-event-rest px-3 py-1 text-xs font-medium rounded-full cursor-pointer select-none shadow-sm"
           data-event='${JSON.stringify(restEventData)}'
-          style="background:${getGradientFromBaseColor(color, 'rest')}; color:${color}; border:2px solid ${color};">
+          style="background-color:${getGradientFromBaseColor(color, 'rest')}; color:${color}; border:2px solid ${color};">
           🔴 Rest
         </div>
       </div>
