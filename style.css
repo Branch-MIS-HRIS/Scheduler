@@ -1,3 +1,4 @@
+
 /* Corporate Light Theme - polished, glassy dashboard look */
 
 /* Base */
@@ -71,10 +72,10 @@ aside {
   box-shadow: 0 6px 18px rgba(2,6,23,0.06);
 }
 #draggable-cards-container > div[data-type="work"] {
-  background-color: #2563eb;
+  background: linear-gradient(135deg, #2563eb, #3b82f6);
 }
 #draggable-cards-container > div[data-type="rest"] {
-  background-color: #ef4444;
+  background: linear-gradient(135deg, #ef4444, #fb7185);
 }
 #draggable-cards-container > div:hover {
   transform: translateY(-2px);
@@ -90,12 +91,12 @@ aside {
   letter-spacing: -0.2px;
 }
 .fc-event-pill.fc-event-work {
-  background-color: #2563eb;
+  background: linear-gradient(90deg, #2563eb, #3b82f6);
   color: white;
   border: none;
 }
 .fc-event-pill.fc-event-rest {
-  background-color: #ef4444;
+  background: linear-gradient(90deg, #ef4444, #fb7185);
   color: white;
   border: none;
 }
@@ -201,7 +202,7 @@ aside h2 { font-weight:700; color:#0f172a; letter-spacing: -0.2px; }
 
 /* Event visuals */
 .fc-event-work {
-  background-color: #2563eb !important;
+  background: linear-gradient(135deg, #2b6cb0 0%, #075985 100%) !important;
   color: #fff !important;
   border: none !important;
   padding: 6px 10px !important;
@@ -212,7 +213,7 @@ aside h2 { font-weight:700; color:#0f172a; letter-spacing: -0.2px; }
   transform-origin: center left;
 }
 .fc-event-rest {
-  background-color: #ef4444 !important;
+  background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%) !important;
   color: #fff !important;
   border: none !important;
   padding: 6px 10px !important;
@@ -261,10 +262,10 @@ aside h2 { font-weight:700; color:#0f172a; letter-spacing: -0.2px; }
   box-shadow: 0 6px 20px rgba(0,0,0,0.1);
 }
 .fc-mirror.fc-event-work {
-  background-color: #2563eb !important;
+  background: linear-gradient(135deg, #2563eb, #3b82f6) !important;
 }
 .fc-mirror.fc-event-rest {
-  background-color: #ef4444 !important;
+  background: linear-gradient(135deg, #ef4444, #fb7185) !important;
 }
 .fc-event:hover {
   transform: translateY(-2px);
