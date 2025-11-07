@@ -4,7 +4,18 @@ document.addEventListener('DOMContentLoaded', function () {
             
             // In-memory 'database' for employees
             let employees = {};
+// persistent per-employee color map
 let employeeColors = JSON.parse(localStorage.getItem('employeeColors')) || {};
+
+// helper: assign unique hue-based color if not stored
+function getEmployeeColor(empNo) {
+  if (!employeeColors[empNo]) {
+    const hue = Math.floor(Math.random() * 360);
+    employeeColors[empNo] = `hsl(${hue}, 70%, 55%)`;
+    try { localStorage.setItem('employeeColors', JSON.stringify(employeeColors)); } catch (e) {}
+  }
+  return employeeColors[empNo];
+}
 
 // add variable to hold style for external-drags
 let __lastDraggedInlineStyle = '';
@@ -275,35 +286,21 @@ function loadFromLocalStorage() {
       // ensure employeeColors is available (persisted earlier by saveToLocalStorage)
       employeeColors = JSON.parse(localStorage.getItem('employeeColors')) || employeeColors || {};
 
-      const baseColors = [
-        '#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#14b8a6',
-        '#ef4444', '#22c55e', '#eab308', '#0ea5e9', '#6366f1', '#84cc16',
-        '#d946ef', '#0d9488', '#fb923c', '#a855f7', '#475569', '#f97316',
-        '#64748b', '#60a5fa', '#65a30d', '#f43f5e', '#059669', '#7c3aed',
-        '#e11d48', '#9333ea', '#2563eb', '#9ca3af', '#15803d'
-      ];
-
       Object.values(employees).forEach(emp => {
-        // assign or reuse a color (same logic used in saveAndGenerate)
-        if (!employeeColors[emp.empNo]) {
-          const used = Object.values(employeeColors);
-          const available = baseColors.filter(c => !used.includes(c));
-          const pick = available.length ? available[0] : baseColors[Object.keys(employeeColors).length % baseColors.length];
-          employeeColors[emp.empNo] = pick;
-        }
-        const color = employeeColors[emp.empNo];
+  // assign or reuse a unique color per employee
+  const color = getEmployeeColor(emp.empNo);
 
-        const workEventData = {
-          title: emp.name,
-          extendedProps: { type: 'work', empNo: emp.empNo, position: emp.position }
-        };
-        const restEventData = {
-          title: emp.name,
-          extendedProps: { type: 'rest', empNo: emp.empNo, position: emp.position }
-        };
+  const workEventData = {
+    title: emp.name,
+    extendedProps: { type: 'work', empNo: emp.empNo, position: emp.position }
+  };
+  const restEventData = {
+    title: emp.name,
+    extendedProps: { type: 'rest', empNo: emp.empNo, position: emp.position }
+  };
 
-        const workStyle = `background-color: ${getGradientFromBaseColor(color, 'work')}; color:#fff; border:none;`;
-        const restStyle = `background-color: ${getGradientFromBaseColor(color, 'rest')}; color:${color}; border:2px solid ${color};`;
+  const workStyle = `background-color:${color}; color:#fff; border:none;`;
+  const restStyle = `background-color:#fff; color:${color}; border:2px solid ${color};`;
 
         const cardHtml = `
           <div class="p-3 bg-white rounded-lg shadow-sm border border-gray-200" data-empno="${emp.empNo}">
@@ -804,24 +801,9 @@ Object.values(employees).forEach(emp => {
     }
   };
 
-  // --- Assign or reuse color for employee ---
-  const baseColors = [
-    '#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#14b8a6',
-    '#ef4444', '#22c55e', '#eab308', '#0ea5e9', '#6366f1', '#84cc16',
-    '#d946ef', '#0d9488', '#fb923c', '#a855f7', '#475569', '#f97316',
-    '#64748b', '#60a5fa', '#65a30d', '#f43f5e', '#0ea5e9', '#059669',
-    '#7c3aed', '#e11d48', '#9333ea', '#2563eb', '#9ca3af', '#15803d'
-  ];
+// --- Assign or reuse color for employee ---
+const color = getEmployeeColor(emp.empNo);
 
-  if (!employeeColors[emp.empNo]) {
-    const usedColors = Object.values(employeeColors);
-    const availableColors = baseColors.filter(c => !usedColors.includes(c));
-    const color = availableColors.length
-      ? availableColors[0]
-      : baseColors[Object.keys(employeeColors).length % baseColors.length];
-    employeeColors[emp.empNo] = color;
-  }
-  const color = employeeColors[emp.empNo];
 
   // --- Draggable Card UI ---
 const cardHtml = `
