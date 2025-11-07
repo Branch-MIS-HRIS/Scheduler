@@ -374,24 +374,34 @@ function loadFromLocalStorage() {
                     /**
                      * Fired when an external element is dropped on the calendar.
                      */
-                    eventReceive: function(info) {
-                        const newEvent = info.event;
-                        const { type, empNo, position } = newEvent.extendedProps;
-                        const dateStr = newEvent.startStr;
-                        
-                        try {
-                          newEvent.setExtendedProp('id', (crypto && crypto.randomUUID) ? crypto.randomUUID() : Date.now().toString());
-                        } catch (e) {
-                          newEvent.setExtendedProp('id', Date.now().toString());
-                        }
+eventReceive: function(info) {
 
-                        const allEvents = calendar.getEvents();
-                        const isDuplicate = allEvents.find(e => 
-                            e.extendedProps.id !== newEvent.extendedProps.id &&
-                            e.startStr === dateStr &&
-                            e.extendedProps.empNo === empNo &&
-                            e.extendedProps.type === type
-                        );
+  const newEvent = info.event;
+  const { type, empNo, position } = newEvent.extendedProps; // this is the correct type
+  const dateStr = newEvent.startStr;
+
+  // ✅ Apply the correct pill color class right on drop
+  if (type === "work") {
+    newEvent.setProp("classNames", ["fc-event-pill", "fc-event-work"]);
+  } else if (type === "rest") {
+    newEvent.setProp("classNames", ["fc-event-pill", "fc-event-rest"]);
+  }
+
+  // ✅ Ensure the event has a unique id
+  try {
+    newEvent.setExtendedProp('id', (crypto && crypto.randomUUID) ? crypto.randomUUID() : Date.now().toString());
+  } catch (e) {
+    newEvent.setExtendedProp('id', Date.now().toString());
+  }
+
+  // ✅ Duplicate check logic (unchanged)
+  const allEvents = calendar.getEvents();
+  const isDuplicate = allEvents.find(e => 
+      e.extendedProps.id !== newEvent.extendedProps.id &&
+      e.startStr === dateStr &&
+      e.extendedProps.empNo === empNo &&
+      e.extendedProps.type === type
+  );
 
                         if (isDuplicate) {
                             showToast(`Duplicate entry blocked: ${employees[empNo] ? employees[empNo].name : empNo} already has a '${type}' day on this date.`, 'error');
@@ -400,14 +410,15 @@ function loadFromLocalStorage() {
                         }
 
                         if (type === 'work') {
-                            currentDroppingEvent = newEvent;
-                            openShiftModal();
-                        } else {
-                            newEvent.setProp('classNames', ['fc-event-rest']);
-                            runConflictDetection();
-                            updateStats();
-                            saveToLocalStorage();
-                        }
+  currentDroppingEvent = newEvent;
+  openShiftModal();
+} else {
+  // Keep the gradient & correct color
+  newEvent.setProp("classNames", ["fc-event-pill", "fc-event-rest"]);
+  runConflictDetection();
+  updateStats();
+  saveToLocalStorage();
+}
                     },
                     
                     /**
