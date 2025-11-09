@@ -1747,5 +1747,8 @@ if (!window.__schedulerContextMenuInit) {
     }));
     if (copiedSchedules.length) showToastWrapper(`Copied ${copiedSchedules.length} schedule${copiedSchedules.length>1?'s':''}.`, 'info');
   }
-}
+  
+  // Start the app after DOM is ready
+  try { startScheduler(); } catch (err) { console.error('startScheduler failed', err); }
+ }
 });
