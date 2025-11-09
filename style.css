@@ -85,16 +85,18 @@ aside h2 {
 
 /* ---------- Pills (FC + schedule) ---------- */
 .fc-event-pill, .schedule-pill {
-  border-radius: 12px;
-  padding: 4px 8px;
+  border-radius: 10px;
+  padding: 3px 7px;
   font-weight: 600;
-  font-size: 11px;
+  font-size: 10px;
+  line-height: 1.2;
   cursor: pointer;
   transition: all 0.2s ease;
   box-shadow: 0 6px 18px rgba(2,6,23,0.06);
   display: flex;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start;
+  gap: 8px;
   width: 100%;
   box-sizing: border-box;
   margin: 2px 0;
@@ -137,7 +139,38 @@ aside h2 {
 .schedule-pill.selected, .fc-event-pill.selected {
   outline: 2px solid #2563eb; /* Sky-600 ring */
   box-shadow: 0 8px 20px rgba(37,99,235,0.3);
-  transform: scale(1.05);
+  transform: scale(1.03);
+}
+
+.pill-content {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  gap: 8px;
+}
+
+.pill-name {
+  flex: 1 1 auto;
+  text-align: left;
+  color: inherit;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pill-shift {
+  flex: 0 0 auto;
+  margin-left: auto;
+  text-align: right;
+  font-size: 10px;
+  font-weight: 600;
+  opacity: 0.9;
+  white-space: nowrap;
+}
+
+#draggable-cards-container .fc-event-pill {
+  justify-content: center;
 }
 
 /* FullCalendar event refinements */

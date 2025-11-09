@@ -62,17 +62,23 @@ function getGradientFromBaseColor(hex, type = 'work') {
             let copiedEmployeeSchedule = null;
             let copiedEmployeeNo = null;
             let copiedEmployeeData = null; // previously undeclared
-            
+
             // FullCalendar instances
             let calendar;
             let draggable;
-            
+
             // State for modals
             let currentDroppingEvent = null;
             let currentDeletingEvent = null;
             // track the hovered schedule pill for reliable key-based copy/paste detection
             let hoveredScheduleId = null;
             let pasteHistory = [];
+            let copiedSchedules = [];
+            let selectedSchedules = new Set();
+            let selectedTargetDates = new Set();
+            let lastMouseX = 0, lastMouseY = 0;
+            let isDragging = false, dragGhost = null;
+            let isSelectingDates = false, dateSelectStartEl = null;
             
             // Configs
             const positionOptions = ['Branch Head', 'Site Supervisor', 'OIC', 'Mac Expert', 'Cashier'];
@@ -461,6 +467,12 @@ eventReceive: function(info) {
      * Fired when an event is dragged and dropped *within* the calendar.
      */
     eventDrop: function(info) {
+      const eventId = info.event.extendedProps?.id || info.event.id;
+      const multiDragActive = (typeof window !== 'undefined' && window.__multiSelectDragActive) || isDragging;
+      if (multiDragActive || (selectedSchedules && selectedSchedules.size > 1 && selectedSchedules.has(String(eventId)))) {
+        info.revert();
+        return;
+      }
       runConflictDetection();
       updateStats();
       saveToLocalStorage();
@@ -479,6 +491,10 @@ eventReceive: function(info) {
      * Fired when an event is clicked.
      */
     eventClick: function(info) {
+      if (info.jsEvent && (info.jsEvent.ctrlKey || info.jsEvent.metaKey)) {
+        info.jsEvent.preventDefault();
+        return;
+      }
       openDeleteModal(info.event);
     },
 
@@ -644,13 +660,11 @@ eventReceive: function(info) {
      */
     eventContent: function(arg) {
       const { shiftCode } = arg.event.extendedProps;
-      const shiftHtml = shiftCode ? `<div class="text-xs opacity-90">${shiftCode}</div>` : '';
+      const shiftHtml = shiftCode ? `<span class="pill-shift">${shiftCode}</span>` : '';
       return {
         html: `
-          <div class="fc-event-main-frame">
-            <div class="fc-event-title-container">
-              <div class="fc-event-title fc-sticky">${arg.event.title}</div>
-            </div>
+          <div class="pill-content">
+            <span class="pill-name">${arg.event.title}</span>
             ${shiftHtml}
           </div>`
       };
@@ -1481,8 +1495,13 @@ function decorateCalendarEvents() {
 
     // Attach click for multi-select Ctrl/Cmd
     el.onclick = e => {
-      if (e.ctrlKey || e.metaKey) toggleScheduleSelection(el, true);
-      else toggleScheduleSelection(el, false);
+      if (e.ctrlKey || e.metaKey) {
+        e.preventDefault();
+        e.stopPropagation();
+        toggleScheduleSelection(el, true);
+      } else {
+        toggleScheduleSelection(el, false);
+      }
     };
 
     el.onmouseenter = () => {
@@ -1504,14 +1523,15 @@ if (!window.__schedulerContextMenuInit) {
   window.__schedulerContextMenuInit = true;
 
   // ---------- STATE ----------
-  let copiedSchedules = [];
-  let selectedSchedules = new Set();
-  let selectedTargetDates = new Set();
-  let lastMouseX = 0, lastMouseY = 0;
+  copiedSchedules = [];
+  selectedSchedules.clear();
+  selectedTargetDates.clear();
+  lastMouseX = 0; lastMouseY = 0;
   hoveredScheduleId = null;
   pasteHistory = [];
-  let isDragging = false, dragGhost = null;
-  let isSelectingDates = false, dateSelectStartEl = null;
+  isDragging = false; dragGhost = null;
+  isSelectingDates = false; dateSelectStartEl = null;
+  window.__multiSelectDragActive = false;
 
   // ---------- UTILITY ----------
   const qAll = (sel, root = document) => Array.from(root.querySelectorAll(sel));
@@ -1548,8 +1568,9 @@ if (!window.__schedulerContextMenuInit) {
 
   function toggleScheduleSelection(el, keepOthers = false) {
     if (!el) return;
-    const id = el.dataset.id;
-    if (!id) return;
+    const rawId = el.dataset.id;
+    if (!rawId) return;
+    const id = String(rawId);
     if (!keepOthers) clearScheduleSelection();
     if (selectedSchedules.has(id)) {
       selectedSchedules.delete(id);
@@ -1769,11 +1790,18 @@ if (!window.__schedulerContextMenuInit) {
     const pill = e.target.closest('.schedule-pill');
     const day = e.target.closest('.fc-daygrid-day, .fc-timegrid-slot');
 
-    if (pill && selectedSchedules.has(pill.dataset.id)) {
-      isDragging = true;
-      createDragGhost(selectedSchedules.size);
-      document.body.classList.add('no-select');
-      return;
+    if (pill) {
+      const pillId = getScheduleIdFromElement(pill) || pill.dataset.id;
+      const normalizedId = pillId ? String(pillId) : null;
+      if (normalizedId && selectedSchedules.size > 1 && selectedSchedules.has(normalizedId)) {
+        e.preventDefault();
+        buildCopiedFromSelected({ silent: true });
+        isDragging = true;
+        window.__multiSelectDragActive = true;
+        createDragGhost(selectedSchedules.size);
+        document.body.classList.add('no-select');
+        return;
+      }
     }
 
     if (day) {
@@ -1812,11 +1840,16 @@ if (!window.__schedulerContextMenuInit) {
     if (isDragging) {
       const el = document.elementFromPoint(e.clientX, e.clientY);
       const dateEl = el?.closest('.fc-daygrid-day, .fc-timegrid-slot');
-      if (dateEl && !copiedSchedules.length) buildCopiedFromSelected();
-      if (dateEl) pasteSchedulesToDates([dateEl.getAttribute('data-date')]);
+      buildCopiedFromSelected({ silent: true });
+      if (dateEl) {
+        pasteSchedulesToDates([dateEl.getAttribute('data-date')]);
+      }
       else if (selectedTargetDates.size) pasteSchedulesToDates(Array.from(selectedTargetDates));
       else showToastWrapper('Drop target not valid.', 'warn');
-      removeDragGhost(); isDragging = false; document.body.classList.remove('no-select');
+      removeDragGhost();
+      isDragging = false;
+      window.__multiSelectDragActive = false;
+      document.body.classList.remove('no-select');
     }
 
     if (isSelectingDates) { isSelectingDates = false; dateSelectStartEl = null; document.body.classList.remove('no-select'); }
@@ -1834,8 +1867,9 @@ if (!window.__schedulerContextMenuInit) {
   }
   function removeDragGhost() { dragGhost?.remove(); dragGhost=null; }
 
-  function buildCopiedFromSelected() {
+  function buildCopiedFromSelected(options = {}) {
     if (!calendar) return;
+    const { silent = false } = options;
     const allEvents = calendar.getEvents();
     copiedSchedules = Array.from(selectedSchedules).map(id =>
       allEvents.find(e => String(e.extendedProps?.id) === String(id) || String(e.id) === String(id))
@@ -1845,7 +1879,9 @@ if (!window.__schedulerContextMenuInit) {
       type: ev.extendedProps?.type ?? null,
       date: ev.startStr
     }));
-    if (copiedSchedules.length) showToastWrapper(`Copied ${copiedSchedules.length} schedule${copiedSchedules.length>1?'s':''}.`, 'info');
+    if (copiedSchedules.length && !silent) {
+      showToastWrapper(`Copied ${copiedSchedules.length} schedule${copiedSchedules.length>1?'s':''}.`, 'info');
+    }
   }
   
   // Start the app after DOM is ready
