@@ -1505,28 +1505,33 @@ if (!window.__schedulerContextMenuInit) {
     document.addEventListener('keydown', keyHandler);
   }
 
-  function copyEmployeeSchedule(empNo) {
-    const emp = employees[empNo];
-    if (!emp) {
-      showToast('Employee not found.', 'error');
-      copiedEmployeeData = null;
-      return;
-    }
-
-    const events = calendar ? calendar.getEvents().filter(e => e.extendedProps && e.extendedProps.empNo === empNo) : [];
-
-    copiedEmployeeData = {
-      empNo: emp.empNo,
-      name: emp.name,
-      events: events.map(e => ({
-        type: e.extendedProps.type,
-        start: e.startStr,
-        shiftCode: e.extendedProps.shiftCode || null
-      }))
-    };
-
-    showToast(`Copied schedule for ${emp.empNo} - ${emp.name} (${copiedEmployeeData.events.length} events)`, 'info');
+function copyEmployeeSchedule(empNo) {
+  const emp = employees[empNo];
+  if (!emp) {
+    showToast('Employee not found.', 'error');
+    copiedEmployeeData = null;
+    return;
   }
+
+  // 🔒 Only one employee's data can exist — overwrite instead of adding
+  copiedEmployeeData = null;
+
+  const events = calendar
+    ? calendar.getEvents().filter(e => e.extendedProps && e.extendedProps.empNo === empNo)
+    : [];
+
+  copiedEmployeeData = {
+    empNo: emp.empNo,
+    name: emp.name,
+    events: events.map(e => ({
+      type: e.extendedProps.type,
+      start: e.startStr,
+      shiftCode: e.extendedProps.shiftCode || null
+    }))
+  };
+
+  showToast(`Copied schedule for ${emp.empNo} - ${emp.name} (${copiedEmployeeData.events.length} events)`, 'info');
+}
 
   function pasteEmployeeSchedule(targetEmpNo) {
     if (!copiedEmployeeData) {
@@ -1671,15 +1676,28 @@ if (!window.__schedulerContextMenuInit) {
       : document.activeElement;
     if (!el) return;
 
-    const target = el.closest?.('[data-empno]');
-    if (!target) return;
+  e.preventDefault();
 
-    const empNo = target.dataset.empno;
-    if (!empNo) return;
+const empTarget = el.closest?.('[data-empno]');
+const dateTarget = el.closest?.('.fc-daygrid-day, .fc-timegrid-slot');
 
-    e.preventDefault();
-    if (key === 'c') copyEmployeeSchedule(empNo);
-    if (key === 'v') pasteEmployeeSchedule(empNo);
+if (key === 'c' && empTarget) {
+  const empNo = empTarget.dataset.empno;
+  if (empNo) copyEmployeeSchedule(empNo);
+}
+
+else if (key === 'v') {
+  // If hovering a date cell, paste to that date
+  if (dateTarget) {
+    const dateStr = dateTarget.getAttribute('data-date');
+    if (dateStr) pasteCopiedScheduleToDate(dateStr);
+  }
+  // Else if hovering an employee card, paste to that employee
+  else if (empTarget) {
+    const empNo = empTarget.dataset.empno;
+    if (empNo) pasteEmployeeSchedule(empNo);
+  }
+}
   });
 
   // --- Initialization calls ---
