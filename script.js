@@ -1415,21 +1415,27 @@ if (shiftSearchInput && shiftPresetSelect) {
 
 // --- INITIAL STARTUP / CALENDAR & DATA ---
 function startScheduler() {
+  // --- Initialize Calendar safely ---
   try { initializeCalendar(); } catch (err) { console.error('initializeCalendar failed', err); }
+
+  // --- Load saved schedules ---
   try { loadFromLocalStorage(); } catch (err) { console.error('loadFromLocalStorage failed', err); }
+
+  // --- Ensure at least one employee row exists ---
   try {
     if (!employeeTableBody || employeeTableBody.querySelectorAll('tr').length === 0) {
       addEmployeeRow();
     }
   } catch (err) { /* silent */ }
 
+  // --- Decorate events after render ---
   try {
     decorateCalendarEvents();
     calendar?.on('eventDidMount', decorateCalendarEvents);
   } catch (err) { console.error('decorateCalendarEvents failed', err); }
 }
 
-// --- Decorate events with .schedule-pill & data-id ---
+// --- Event decoration for FullCalendar (plug-and-play) ---
 function decorateCalendarEvents() {
   if (!calendar) return;
   const allEvents = calendar.getEvents();
@@ -1438,13 +1444,19 @@ function decorateCalendarEvents() {
     if (!el) return;
     if (!el.classList.contains('schedule-pill')) el.classList.add('schedule-pill');
     if (!el.dataset.id) el.dataset.id = ev.extendedProps?.id || ev.id;
+
+    // Attach click for multi-select Ctrl/Cmd
+    el.onclick = e => {
+      if (e.ctrlKey || e.metaKey) toggleScheduleSelection(el, true);
+      else toggleScheduleSelection(el, false);
+    };
   });
 }
 
 // --- Start everything ---
 startScheduler();
 
-// --- FULL SCHEDULER COPY/PASTE + DRAG SELECT ---
+// --- FULL SCHEDULER COPY/PASTE + DRAG SELECT (PLUG-AND-PLAY) ---
 if (!window.__schedulerContextMenuInit) {
   window.__schedulerContextMenuInit = true;
 
@@ -1459,6 +1471,7 @@ if (!window.__schedulerContextMenuInit) {
   // ---------- UTILITY ----------
   const qAll = (sel, root = document) => Array.from(root.querySelectorAll(sel));
   const q = (sel, root = document) => root.querySelector(sel);
+
   const updateMouse = e => { lastMouseX = e.clientX; lastMouseY = e.clientY; };
   document.addEventListener('mousemove', updateMouse);
 
@@ -1511,7 +1524,6 @@ if (!window.__schedulerContextMenuInit) {
   function copySelectedSchedules() {
     if (selectedSchedules.size === 0) return showToastWrapper('No schedule selected.', 'warn');
     if (!calendar) return showToastWrapper('Calendar not ready.', 'error');
-
     const allEvents = calendar.getEvents();
     copiedSchedules = Array.from(selectedSchedules).map(id =>
       allEvents.find(e => String(e.extendedProps?.id) === String(id) || String(e.id) === String(id))
@@ -1521,7 +1533,6 @@ if (!window.__schedulerContextMenuInit) {
       type: ev.extendedProps.type ?? null,
       date: ev.startStr
     }));
-
     showToastWrapper(`Copied ${copiedSchedules.length} schedule${copiedSchedules.length > 1 ? 's' : ''}.`, 'info');
   }
 
@@ -1571,11 +1582,7 @@ if (!window.__schedulerContextMenuInit) {
   document.addEventListener('contextmenu', e => {
     const pill = e.target.closest('.schedule-pill');
     const dateEl = e.target.closest('.fc-daygrid-day, .fc-timegrid-slot');
-
-    // Ctrl/Cmd keep selection, otherwise single selection
-    if (pill && !selectedSchedules.has(pill.dataset.id)) {
-      toggleScheduleSelection(pill, e.ctrlKey || e.metaKey);
-    }
+    if (pill && !pill.classList.contains('selected')) toggleScheduleSelection(pill);
 
     e.preventDefault();
     removeContextMenu();
@@ -1647,13 +1654,10 @@ if (!window.__schedulerContextMenuInit) {
     const pill = e.target.closest('.schedule-pill');
     const day = e.target.closest('.fc-daygrid-day, .fc-timegrid-slot');
 
-    if (pill) {
-      toggleScheduleSelection(pill, e.ctrlKey || e.metaKey);
-      if (selectedSchedules.has(pill.dataset.id)) {
-        isDragging = true;
-        createDragGhost(selectedSchedules.size);
-        document.body.classList.add('no-select');
-      }
+    if (pill && selectedSchedules.has(pill.dataset.id)) {
+      isDragging = true;
+      createDragGhost(selectedSchedules.size);
+      document.body.classList.add('no-select');
       return;
     }
 
@@ -1670,11 +1674,6 @@ if (!window.__schedulerContextMenuInit) {
     if (isDragging && dragGhost) {
       dragGhost.style.left = `${e.pageX + 12}px`;
       dragGhost.style.top = `${e.pageY + 12}px`;
-
-      const el = document.elementFromPoint(e.clientX, e.clientY)?.closest('.fc-daygrid-day, .fc-timegrid-slot');
-      qAll('.fc-daygrid-day.hover-preview, .fc-timegrid-slot.hover-preview')
-        .forEach(prev => prev.classList.remove('hover-preview'));
-      if (el) el.classList.add('hover-preview');
     } else if (isSelectingDates && dateSelectStartEl) {
       const cur = document.elementFromPoint(e.clientX, e.clientY);
       const hoverDay = cur?.closest('.fc-daygrid-day, .fc-timegrid-slot');
@@ -1704,22 +1703,21 @@ if (!window.__schedulerContextMenuInit) {
       else showToastWrapper('Drop target not valid.', 'warn');
       removeDragGhost(); isDragging = false; document.body.classList.remove('no-select');
     }
+
     if (isSelectingDates) { isSelectingDates = false; dateSelectStartEl = null; document.body.classList.remove('no-select'); }
   });
 
   function createDragGhost(count) {
     removeDragGhost();
     dragGhost = document.createElement('div');
-    dragGhost.className = 'drag-ghost fixed z-50 p-2 rounded border border-gray-300 bg-white shadow text-sm font-semibold';
+    dragGhost.className = 'drag-ghost fixed z-50 p-2 rounded border border-gray-300 bg-white shadow';
     dragGhost.style.pointerEvents = 'none';
     dragGhost.style.left = `${lastMouseX+12}px`; dragGhost.style.top = `${lastMouseY+12}px`;
-    dragGhost.style.minWidth = '140px';
-    dragGhost.style.textAlign = 'center';
-    dragGhost.innerHTML = `📋 ${count} schedule${count>1?'s':''} — drag to date`;
+    dragGhost.style.minWidth = '120px';
+    dragGhost.innerHTML = `<strong>${count}</strong> schedule${count>1?'s':''} — drag to date`;
     document.body.appendChild(dragGhost);
   }
-
-  function removeDragGhost() { dragGhost?.remove(); dragGhost = null; qAll('.fc-daygrid-day.hover-preview, .fc-timegrid-slot.hover-preview').forEach(el => el.classList.remove('hover-preview')); }
+  function removeDragGhost() { dragGhost?.remove(); dragGhost=null; }
 
   function buildCopiedFromSelected() {
     if (!calendar) return;
@@ -1734,7 +1732,6 @@ if (!window.__schedulerContextMenuInit) {
     }));
     if (copiedSchedules.length) showToastWrapper(`Copied ${copiedSchedules.length} schedule${copiedSchedules.length>1?'s':''}.`, 'info');
   }
-
 }
 
 });
