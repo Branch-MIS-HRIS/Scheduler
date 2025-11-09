@@ -1413,256 +1413,297 @@ if (shiftSearchInput && shiftPresetSelect) {
                 }
             });
 
-// --- CONTEXT MENU + COPY/PASTE LOGIC ---
+// --- FULL SCHEDULER COPY/PASTE + DRAG SELECT (PLUG-AND-PLAY) ---
 if (!window.__schedulerContextMenuInit) {
   window.__schedulerContextMenuInit = true;
 
-  // Track mouse position for keyboard copy/paste detection
+  // ---------- STATE ----------
+  let copiedSchedules = [];
+  let selectedSchedules = new Set();
+  let selectedTargetDates = new Set();
   let lastMouseX = 0, lastMouseY = 0;
-  let selectedDates = []; // for multi-date bulk paste
-  document.addEventListener('mousemove', e => {
-    lastMouseX = e.clientX;
-    lastMouseY = e.clientY;
-  });
+  let isDragging = false, dragGhost = null;
+  let isSelectingDates = false, dateSelectStartEl = null;
 
-  // --- CONTEXT MENU ---
-  document.addEventListener('contextmenu', e => {
-    const el = document.elementFromPoint(e.clientX, e.clientY);
+  // ---------- UTILITY ----------
+  const qAll = (sel, root = document) => Array.from(root.querySelectorAll(sel));
+  const q = (sel, root = document) => root.querySelector(sel);
+
+  const updateMouse = e => { lastMouseX = e.clientX; lastMouseY = e.clientY; };
+  document.addEventListener('mousemove', updateMouse);
+
+  function showToastWrapper(msg, type = 'info') { showToast?.(msg, type); }
+
+  function clearScheduleSelection() {
+    selectedSchedules.clear();
+    qAll('.schedule-pill.selected').forEach(el =>
+      el.classList.remove('selected', 'ring-2', 'ring-blue-500', 'shadow-lg')
+    );
+  }
+
+  function clearTargetDateSelection() {
+    selectedTargetDates.clear();
+    qAll('.fc-daygrid-day.selected-date, .fc-timegrid-slot.selected-date')
+      .forEach(el => el.classList.remove('selected-date'));
+  }
+
+  function toggleScheduleSelection(el, keepOthers = false) {
     if (!el) return;
-
-    const empTarget = el.closest('[data-empno]');
-    const calendarEl = el.closest('.fc-daygrid-day, .fc-timegrid-slot');
-
-    if (empTarget) {
-      e.preventDefault();
-      e.stopPropagation();
-      showContextMenu(e.pageX, e.pageY, empTarget.dataset.empno);
-    } else if (calendarEl && copiedEmployeeData) {
-      e.preventDefault();
-      e.stopPropagation();
-      showCalendarPasteMenu(e.pageX, e.pageY, calendarEl.getAttribute('data-date'));
+    const id = el.dataset.id;
+    if (!id) return;
+    if (!keepOthers) clearScheduleSelection();
+    if (selectedSchedules.has(id)) {
+      selectedSchedules.delete(id);
+      el.classList.remove('selected', 'ring-2', 'ring-blue-500', 'shadow-lg');
+    } else {
+      selectedSchedules.add(id);
+      el.classList.add('selected', 'ring-2', 'ring-blue-500', 'shadow-lg');
     }
-  });
-
-  function showContextMenu(x, y, empNo) {
-    document.querySelector('#context-menu')?.remove();
-    const menu = document.createElement('div');
-    menu.id = 'context-menu';
-    menu.className = 'absolute bg-white border border-gray-300 rounded shadow-lg z-50';
-    menu.style.left = `${x}px`;
-    menu.style.top = `${y}px`;
-    menu.style.minWidth = '160px';
-    menu.innerHTML = `
-      <button id="copy-schedule" class="block w-full text-left px-4 py-2 hover:bg-gray-100">📋 Copy Schedule</button>
-      <button id="paste-schedule" class="block w-full text-left px-4 py-2 hover:bg-gray-100">📥 Paste Schedule</button>
-    `;
-    document.body.appendChild(menu);
-
-    document.getElementById('copy-schedule').onclick = () => { copyEmployeeSchedule(empNo); menu.remove(); };
-    document.getElementById('paste-schedule').onclick = () => { pasteEmployeeSchedule(empNo); menu.remove(); };
-
-    const remover = () => {
-      menu.remove();
-      document.removeEventListener('keydown', keyHandler);
-      document.removeEventListener('click', remover);
-    };
-    const keyHandler = ev => { if (ev.key === 'Escape') remover(); };
-    document.addEventListener('click', remover, { once: true });
-    document.addEventListener('keydown', keyHandler);
   }
 
-  function showCalendarPasteMenu(x, y, dateStr) {
-    document.querySelector('#context-menu')?.remove();
-    const menu = document.createElement('div');
-    menu.id = 'context-menu';
-    menu.className = 'absolute bg-white border border-gray-300 rounded shadow-lg z-50';
-    menu.style.left = `${x}px`;
-    menu.style.top = `${y}px`;
-    menu.innerHTML = `
-      <button id="paste-schedule-calendar" class="block w-full text-left px-4 py-2 hover:bg-gray-100">
-        📅 Paste Schedule Here (${dateStr})
-      </button>
-    `;
-    document.body.appendChild(menu);
-
-    document.getElementById('paste-schedule-calendar').onclick = () => {
-      pasteCopiedScheduleToDates([dateStr]);
-      menu.remove();
-    };
-
-    const remover = () => {
-      menu.remove();
-      document.removeEventListener('keydown', keyHandler);
-      document.removeEventListener('click', remover);
-    };
-    const keyHandler = ev => { if (ev.key === 'Escape') remover(); };
-    document.addEventListener('click', remover, { once: true });
-    document.addEventListener('keydown', keyHandler);
+  function toggleTargetDateSelection(el, keepOthers = false) {
+    if (!el) return;
+    const dateStr = el.getAttribute('data-date');
+    if (!dateStr) return;
+    if (!keepOthers) clearTargetDateSelection();
+    if (selectedTargetDates.has(dateStr)) {
+      selectedTargetDates.delete(dateStr);
+      el.classList.remove('selected-date');
+    } else {
+      selectedTargetDates.add(dateStr);
+      el.classList.add('selected-date');
+    }
   }
 
-  // --- COPY EMPLOYEE SCHEDULE ---
-  function copyEmployeeSchedule(empNo) {
-    copiedEmployeeData = null; // clear previous copy
-    const emp = employees[empNo];
-    if (!emp) return showToast('Employee not found.', 'error');
+  function removeContextMenu() { q('#context-menu')?.remove(); }
 
-    // Only copy original events (ignore previously pasted/copied events)
-    const events = calendar?.getEvents()
-      .filter(e => e.extendedProps?.empNo === empNo && !String(e.id).startsWith('copied-') && !String(e.id).startsWith('pasted-')) || [];
-
-    copiedEmployeeData = {
-      empNo: emp.empNo,
-      name: emp.name,
-      events: events.map(e => ({
-        type: e.extendedProps.type,
-        start: e.startStr,
-        shiftCode: e.extendedProps.shiftCode || null
-      }))
-    };
-
-    showToast(`Copied schedule for ${emp.empNo} - ${emp.name} (${copiedEmployeeData.events.length} events)`, 'info');
-  }
-
-  // --- PASTE TO EMPLOYEE ---
-  function pasteEmployeeSchedule(targetEmpNo) {
-    if (!copiedEmployeeData) return showToast('Nothing copied yet.', 'error');
-    const target = employees[targetEmpNo];
-    if (!target) return showToast('Target employee not found.', 'error');
-    if (!calendar) return showToast('Calendar not initialized.', 'error');
-
-    let added = 0, skipped = 0;
-    copiedEmployeeData.events.forEach(ev => {
-      const exists = calendar.getEvents().some(e =>
-        e.extendedProps?.empNo === targetEmpNo &&
-        e.startStr === ev.start &&
-        e.extendedProps?.type === ev.type
-      );
-      if (exists) { skipped++; return; }
-
-      const newExtended = {
-        type: ev.type,
-        empNo: targetEmpNo,
-        position: target.position,
-        shiftCode: ev.shiftCode || undefined,
-        id: crypto?.randomUUID?.() ?? `copied-${Date.now()}-${Math.random().toString(36).slice(2,8)}`
-      };
-
-      calendar.addEvent({
-        title: target.name,
-        start: ev.start,
-        extendedProps: newExtended
-      });
-      added++;
+  // ---------- DECORATE FULLCALENDAR EVENTS (PLUG-AND-PLAY) ----------
+  function decorateCalendarEvents() {
+    if (!calendar) return;
+    const allEvents = calendar.getEvents();
+    allEvents.forEach(ev => {
+      const el = document.querySelector(`[data-event-id="${ev.id}"]`);
+      if (!el) return;
+      if (!el.classList.contains('schedule-pill')) el.classList.add('schedule-pill');
+      if (!el.dataset.id) el.dataset.id = ev.extendedProps?.id || ev.id;
     });
-
-    runConflictDetection();
-    updateStats();
-    saveToLocalStorage();
-    showToast(`Pasted to ${targetEmpNo}: ${added} added, ${skipped} skipped`, added ? 'success' : 'warn');
   }
 
-  // --- PASTE TO MULTIPLE DATES ---
-  function pasteCopiedScheduleToDates(datesArray) {
-    if (!copiedEmployeeData || !calendar) return showToast('No copied schedule available.', 'error');
+  // Call decoration after calendar render
+  calendar?.on('eventDidMount', decorateCalendarEvents);
 
-    const empNo = copiedEmployeeData.empNo;
-    const emp = employees[empNo];
-    if (!emp) return showToast('Original employee data missing.', 'error');
+  // ---------- COPY / PASTE ----------
+  function copySelectedSchedules() {
+    if (selectedSchedules.size === 0) return showToastWrapper('No schedule selected.', 'warn');
+    if (!calendar) return showToastWrapper('Calendar not ready.', 'error');
+    const allEvents = calendar.getEvents();
+    copiedSchedules = Array.from(selectedSchedules).map(id =>
+      allEvents.find(e => String(e.extendedProps?.id) === String(id) || String(e.id) === String(id))
+    ).filter(Boolean).map(ev => ({
+      empNo: ev.extendedProps.empNo,
+      shiftCode: ev.extendedProps.shiftCode ?? null,
+      type: ev.extendedProps.type ?? null,
+      date: ev.startStr
+    }));
+    showToastWrapper(`Copied ${copiedSchedules.length} schedule${copiedSchedules.length > 1 ? 's' : ''}.`, 'info');
+  }
 
-    let totalAdded = 0, totalSkipped = 0;
-    const srcEvents = copiedEmployeeData.events;
-    if (!srcEvents || srcEvents.length === 0) return showToast('No events to paste.', 'warn');
+  function pasteSchedulesToDates(datesArray) {
+    if (!copiedSchedules.length) return showToastWrapper('Nothing copied.', 'warn');
+    if (!calendar) return showToastWrapper('Calendar not ready.', 'error');
 
-    datesArray.forEach(dateStr => {
-      const targetDate = new Date(dateStr);
-      const firstSrcDate = new Date(srcEvents[0].start);
-      const offsetDays = Math.round((targetDate - firstSrcDate) / (1000*60*60*24));
+    const uniqueDates = Array.from(new Set(datesArray)).sort();
+    const baseDate = new Date(copiedSchedules[0].date);
+    let added = 0, skipped = 0;
 
-      srcEvents.forEach(ev => {
-        const newDate = new Date(ev.start);
+    uniqueDates.forEach(targetStr => {
+      const targetDate = new Date(targetStr);
+      const offsetDays = Math.round((targetDate - baseDate) / (1000*60*60*24));
+      copiedSchedules.forEach(src => {
+        const newDate = new Date(src.date);
         newDate.setDate(newDate.getDate() + offsetDays);
         const newDateStr = newDate.toISOString().split('T')[0];
-
         const exists = calendar.getEvents().some(e =>
-          e.extendedProps?.empNo === empNo &&
-          e.startStr === newDateStr &&
-          e.extendedProps?.type === ev.type
+          e.extendedProps.empNo === src.empNo &&
+          (!src.type || e.extendedProps.type === src.type) &&
+          e.startStr === newDateStr
         );
-        if (exists) { totalSkipped++; return; }
-
-        const newExtended = {
-          type: ev.type,
-          empNo: empNo,
-          position: emp.position,
-          shiftCode: ev.shiftCode || undefined,
-          id: crypto?.randomUUID?.() ?? `pasted-${Date.now()}-${Math.random().toString(36).slice(2,8)}`
-        };
-
+        if (exists) { skipped++; return; }
         calendar.addEvent({
-          title: emp.name,
+          title: employees?.[src.empNo]?.name ?? src.empNo,
           start: newDateStr,
-          extendedProps: newExtended
+          extendedProps: {
+            id: crypto?.randomUUID?.() ?? `sched-${Date.now()}-${Math.random().toString(36).slice(2,8)}`,
+            empNo: src.empNo,
+            shiftCode: src.shiftCode,
+            type: src.type
+          }
         });
-        totalAdded++;
+        added++;
       });
     });
 
     runConflictDetection();
     updateStats();
     saveToLocalStorage();
-    showToast(`Pasted ${totalAdded} events (${totalSkipped} skipped)`, totalAdded ? 'success' : 'warn');
+    showToastWrapper(`Pasted ${added} schedule${added !== 1 ? 's' : ''} (${skipped} skipped).`, added ? 'success' : 'warn');
+
+    clearTargetDateSelection();
   }
 
-  // --- KEYBOARD SHORTCUTS ---
+  // ---------- CONTEXT MENU ----------
+  document.addEventListener('contextmenu', e => {
+    const pill = e.target.closest('.schedule-pill');
+    const dateEl = e.target.closest('.fc-daygrid-day, .fc-timegrid-slot');
+    if (pill && !pill.classList.contains('selected')) toggleScheduleSelection(pill);
+
+    e.preventDefault();
+    removeContextMenu();
+
+    const x = e.pageX, y = e.pageY;
+    const menu = document.createElement('div');
+    menu.id = 'context-menu';
+    menu.className = 'absolute bg-white border border-gray-300 rounded shadow-lg z-50';
+    menu.style.left = `${x}px`; menu.style.top = `${y}px`; menu.style.minWidth = '180px';
+
+    if (selectedSchedules.size) {
+      const btn = document.createElement('button');
+      btn.className = 'block w-full text-left px-4 py-2 hover:bg-gray-100';
+      btn.innerText = `📋 Copy Selected Schedule${selectedSchedules.size>1?'s':''}`;
+      btn.onclick = () => { copySelectedSchedules(); removeContextMenu(); };
+      menu.appendChild(btn);
+    }
+
+    if (dateEl && copiedSchedules.length) {
+      const targetStr = dateEl.getAttribute('data-date');
+      const pasteBtn = document.createElement('button');
+      pasteBtn.className = 'block w-full text-left px-4 py-2 hover:bg-gray-100';
+      pasteBtn.innerText = `📅 Paste Here (${targetStr})`;
+      pasteBtn.onclick = () => { pasteSchedulesToDates([targetStr]); removeContextMenu(); };
+      menu.appendChild(pasteBtn);
+
+      if (selectedTargetDates.size) {
+        const pasteMultiBtn = document.createElement('button');
+        pasteMultiBtn.className = 'block w-full text-left px-4 py-2 hover:bg-gray-100';
+        pasteMultiBtn.innerText = `📅 Paste to ${selectedTargetDates.size} selected date(s)`;
+        pasteMultiBtn.onclick = () => { pasteSchedulesToDates(Array.from(selectedTargetDates)); removeContextMenu(); };
+        menu.appendChild(pasteMultiBtn);
+      }
+    }
+
+    if (!menu.hasChildNodes()) {
+      const hint = document.createElement('div');
+      hint.className = 'px-4 py-2 text-sm text-gray-500';
+      hint.innerText = 'No actions available';
+      menu.appendChild(hint);
+    }
+
+    document.body.appendChild(menu);
+    document.addEventListener('click', removeContextMenu, { once: true });
+    document.addEventListener('keydown', ev => { if (ev.key === 'Escape') removeContextMenu(); }, { once: true });
+  });
+
+  // ---------- KEYBOARD SHORTCUTS ----------
   document.addEventListener('keydown', e => {
     const tag = e.target?.tagName?.toLowerCase();
     if (tag === 'input' || tag === 'textarea' || e.target?.isContentEditable) return;
     if (!(e.ctrlKey || e.metaKey)) return;
 
     const key = (e.key || '').toLowerCase();
-    if (key !== 'c' && key !== 'v') return;
-
-    const el = (typeof lastMouseX === 'number' && typeof lastMouseY === 'number')
-      ? document.elementFromPoint(lastMouseX, lastMouseY)
-      : document.activeElement;
-    if (!el) return;
-
-    e.preventDefault();
-
-    const empTarget = el.closest?.('[data-empno]');
-    const dateTarget = el.closest?.('.fc-daygrid-day, .fc-timegrid-slot');
-
-    if (key === 'c' && empTarget) {
-      copyEmployeeSchedule(empTarget.dataset.empno);
-    } else if (key === 'v') {
-      // Ctrl+V: bulk paste
-      if (selectedDates.length > 0) {
-        pasteCopiedScheduleToDates(selectedDates);
-        return;
-      }
-
-      // Paste to hovered date cell
-      const dateStr = dateTarget?.getAttribute('data-date');
-      if (dateStr) {
-        pasteCopiedScheduleToDates([dateStr]);
-        return;
-      }
-
-      // Paste to employee card
-      if (empTarget) {
-        pasteEmployeeSchedule(empTarget.dataset.empno);
-        return;
-      }
-
-      showToast('Hover over a date or employee to paste.', 'warn');
+    if (key === 'c') { e.preventDefault(); copySelectedSchedules(); }
+    if (key === 'v') {
+      e.preventDefault();
+      const el = document.elementFromPoint(lastMouseX, lastMouseY);
+      const dateEl = el?.closest('.fc-daygrid-day, .fc-timegrid-slot');
+      if (selectedTargetDates.size) pasteSchedulesToDates(Array.from(selectedTargetDates));
+      else if (dateEl) pasteSchedulesToDates([dateEl.getAttribute('data-date')]);
+      else showToastWrapper('Hover over a date or select target dates to paste.', 'warn');
     }
   });
 
-  // --- Initialization ---
-  initializeCalendar();
-  initializeDraggable();
-  addEmployeeRow();
-  loadFromLocalStorage();
-  updateStats();
+  // ---------- DRAG SELECTION (schedules or dates) ----------
+  document.addEventListener('mousedown', e => {
+    if (e.button !== 0) return;
+    const pill = e.target.closest('.schedule-pill');
+    const day = e.target.closest('.fc-daygrid-day, .fc-timegrid-slot');
+
+    if (pill && selectedSchedules.has(pill.dataset.id)) {
+      isDragging = true;
+      createDragGhost(selectedSchedules.size);
+      document.body.classList.add('no-select');
+      return;
+    }
+
+    if (day) {
+      isSelectingDates = true;
+      dateSelectStartEl = day;
+      if (!(e.ctrlKey || e.metaKey)) clearTargetDateSelection();
+      toggleTargetDateSelection(day, true);
+      document.body.classList.add('no-select');
+    }
+  });
+
+  document.addEventListener('mousemove', e => {
+    if (isDragging && dragGhost) {
+      dragGhost.style.left = `${e.pageX + 12}px`;
+      dragGhost.style.top = `${e.pageY + 12}px`;
+    } else if (isSelectingDates && dateSelectStartEl) {
+      const cur = document.elementFromPoint(e.clientX, e.clientY);
+      const hoverDay = cur?.closest('.fc-daygrid-day, .fc-timegrid-slot');
+      if (!hoverDay) return;
+      const start = new Date(dateSelectStartEl.getAttribute('data-date'));
+      const end = new Date(hoverDay.getAttribute('data-date'));
+      const s = start < end ? start : end;
+      const t = start < end ? end : start;
+      const datesRange = [];
+      for (let d = new Date(s); d <= t; d.setDate(d.getDate()+1))
+        datesRange.push(new Date(d).toISOString().split('T')[0]);
+      clearTargetDateSelection();
+      datesRange.forEach(ds => {
+        const cell = document.querySelector(`.fc-daygrid-day[data-date="${ds}"], .fc-timegrid-slot[data-date="${ds}"]`);
+        if (cell) { selectedTargetDates.add(ds); cell.classList.add('selected-date'); }
+      });
+    }
+  });
+
+  document.addEventListener('mouseup', e => {
+    if (isDragging) {
+      const el = document.elementFromPoint(e.clientX, e.clientY);
+      const dateEl = el?.closest('.fc-daygrid-day, .fc-timegrid-slot');
+      if (dateEl && !copiedSchedules.length) buildCopiedFromSelected();
+      if (dateEl) pasteSchedulesToDates([dateEl.getAttribute('data-date')]);
+      else if (selectedTargetDates.size) pasteSchedulesToDates(Array.from(selectedTargetDates));
+      else showToastWrapper('Drop target not valid.', 'warn');
+      removeDragGhost(); isDragging = false; document.body.classList.remove('no-select');
+    }
+
+    if (isSelectingDates) { isSelectingDates = false; dateSelectStartEl = null; document.body.classList.remove('no-select'); }
+  });
+
+  function createDragGhost(count) {
+    removeDragGhost();
+    dragGhost = document.createElement('div');
+    dragGhost.className = 'drag-ghost fixed z-50 p-2 rounded border border-gray-300 bg-white shadow';
+    dragGhost.style.pointerEvents = 'none';
+    dragGhost.style.left = `${lastMouseX+12}px`; dragGhost.style.top = `${lastMouseY+12}px`;
+    dragGhost.style.minWidth = '120px';
+    dragGhost.innerHTML = `<strong>${count}</strong> schedule${count>1?'s':''} — drag to date`;
+    document.body.appendChild(dragGhost);
+  }
+  function removeDragGhost() { dragGhost?.remove(); dragGhost=null; }
+
+  function buildCopiedFromSelected() {
+    if (!calendar) return;
+    const allEvents = calendar.getEvents();
+    copiedSchedules = Array.from(selectedSchedules).map(id =>
+      allEvents.find(e => String(e.extendedProps?.id) === String(id) || String(e.id) === String(id))
+    ).filter(Boolean).map(ev => ({
+      empNo: ev.extendedProps.empNo,
+      shiftCode: ev.extendedProps?.shiftCode ?? null,
+      type: ev.extendedProps?.type ?? null,
+      date: ev.startStr
+    }));
+    if (copiedSchedules.length) showToastWrapper(`Copied ${copiedSchedules.length} schedule${copiedSchedules.length>1?'s':''}.`, 'info');
+  }
 }
 });
