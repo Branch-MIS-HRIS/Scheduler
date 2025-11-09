@@ -1412,7 +1412,7 @@ if (shiftSearchInput && shiftPresetSelect) {
             });
 
 
-            // --- CONTEXT MENU + COPY/PASTE LOGIC ---
+// --- CONTEXT MENU + COPY/PASTE LOGIC ---
 if (!window.__schedulerContextMenuInit) {
   window.__schedulerContextMenuInit = true;
 
@@ -1678,11 +1678,13 @@ if (!window.__schedulerContextMenuInit) {
     e.preventDefault();
     if (key === 'c') copyEmployeeSchedule(empNo);
     if (key === 'v') pasteEmployeeSchedule(empNo);
-});
+  });
 
-// --- Initialization calls ---
-initializeCalendar();
-initializeDraggable();
-addEmployeeRow();
-loadFromLocalStorage();
-updateStats();
+  // --- Initialization calls ---
+  initializeCalendar();
+  initializeDraggable();
+  addEmployeeRow();
+  loadFromLocalStorage();
+  updateStats();
+} 
+});
