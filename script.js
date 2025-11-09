@@ -70,6 +70,8 @@ let copiedEmployeeData = null; // previously undeclared
             // State for modals
             let currentDroppingEvent = null;
             let currentDeletingEvent = null;
+            // track last mouse position for reliable key-based copy/paste target detection
+            let lastMouseX = 0, lastMouseY = 0;
             
             // Configs
             const positionOptions = ['Branch Head', 'Site Supervisor', 'OIC', 'Mac Expert', 'Cashier'];
@@ -492,6 +494,11 @@ eventReceive: function(info) {
 
       const { type, shiftCode, isConflict, empNo } = info.event.extendedProps;
       const emp = employees[empNo];
+
+      // Make calendar event DOM queryable by empNo (enables contextmenu / keyboard copy-paste)
+      if (empNo) {
+        try { info.el.setAttribute('data-empno', empNo); } catch (e) {}
+      }
 
       // Guard: if empNo is missing, avoid creating/assigning colors and hide the event early
       if (!empNo) {
@@ -1405,11 +1412,22 @@ if (shiftSearchInput && shiftPresetSelect) {
             });
 
         // --- CONTEXT MENU + COPY/PASTE LOGIC ---
+// track mouse position (for keyboard copy/paste detection)
+document.addEventListener('mousemove', function(e) {
+  lastMouseX = e.clientX;
+  lastMouseY = e.clientY;
+});
+
 document.addEventListener('contextmenu', function (e) {
-  const card = e.target.closest('[data-empno]');
-  if (!card) return;
+  // determine the element under the pointer reliably
+  const el = document.elementFromPoint(e.clientX, e.clientY);
+  if (!el) return;
+  const target = el.closest && el.closest('[data-empno]');
+  if (!target) return;
   e.preventDefault();
-  const empNo = card.dataset.empno;
+  e.stopPropagation();
+  const empNo = target.dataset.empno;
+  if (!empNo) return;
   showContextMenu(e.pageX, e.pageY, empNo);
 });
 
@@ -1420,6 +1438,7 @@ function showContextMenu(x, y, empNo) {
   menu.className = 'absolute bg-white border border-gray-300 rounded shadow-lg z-50';
   menu.style.left = `${x}px`;
   menu.style.top = `${y}px`;
+  menu.style.minWidth = '160px';
   menu.innerHTML = `
     <button id="copy-schedule" class="block w-full text-left px-4 py-2 hover:bg-gray-100">📋 Copy Schedule</button>
     <button id="paste-schedule" class="block w-full text-left px-4 py-2 hover:bg-gray-100">📥 Paste Schedule</button>
@@ -1427,7 +1446,11 @@ function showContextMenu(x, y, empNo) {
   document.body.appendChild(menu);
   document.getElementById('copy-schedule').onclick = () => { copyEmployeeSchedule(empNo); menu.remove(); };
   document.getElementById('paste-schedule').onclick = () => { pasteEmployeeSchedule(empNo); menu.remove(); };
-  document.addEventListener('click', () => menu.remove(), { once: true });
+  // remove menu on next click or Escape
+  const remover = (ev) => { menu.remove(); document.removeEventListener('keydown', keyHandler); document.removeEventListener('click', remover); };
+  const keyHandler = (ev) => { if (ev.key === 'Escape') remover(); };
+  document.addEventListener('click', remover, { once: true });
+  document.addEventListener('keydown', keyHandler);
 }
 
 function copyEmployeeSchedule(empNo) {
@@ -1524,25 +1547,28 @@ function pasteEmployeeSchedule(targetEmpNo) {
   showToast(`Pasted to ${targetEmpNo}: ${added} added, ${skipped} skipped (duplicates).`, added ? 'success' : 'warn');
 }
 
-// ...existing code...
-
 document.addEventListener('keydown', (e) => {
-  // Support Ctrl/Cmd + C/V and normalize key
-  const key = (e.key || '').toLowerCase();
+  // don't interfere while typing in inputs/textareas or when no modifier
+  const tag = (e.target && e.target.tagName) ? e.target.tagName.toLowerCase() : '';
+  if (tag === 'input' || tag === 'textarea' || e.target && e.target.isContentEditable) return;
   if (!(e.ctrlKey || e.metaKey)) return;
 
-  const hovered = document.querySelector('[data-empno]:hover');
-  if (!hovered) return;
-  const empNo = hovered.dataset.empno;
+  const key = (e.key || '').toLowerCase();
+  if (key !== 'c' && key !== 'v') return;
 
-  if (key === 'c') {
-    e.preventDefault();
-    copyEmployeeSchedule(empNo);
-  }
-  if (key === 'v') {
-    e.preventDefault();
-    pasteEmployeeSchedule(empNo);
-  }
+  // use last known mouse position to determine the element under cursor
+  const el = (typeof lastMouseX === 'number' && typeof lastMouseY === 'number')
+    ? document.elementFromPoint(lastMouseX, lastMouseY)
+    : document.activeElement;
+  if (!el) return;
+  const target = el.closest && el.closest('[data-empno]');
+  if (!target) return;
+  const empNo = target.dataset.empno;
+  if (!empNo) return;
+
+  e.preventDefault();
+  if (key === 'c') copyEmployeeSchedule(empNo);
+  if (key === 'v') pasteEmployeeSchedule(empNo);
 });
 
 
