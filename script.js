@@ -684,12 +684,14 @@ try {
 }
 
 // ✅ Ensure drag alignment matches sidebar & calendar
-calendar.on('eventDragStart', function(info) {
-  info.el.style.transform = 'translateY(-4px)';
-});
-calendar.on('eventDragStop', function(info) {
-  info.el.style.transform = 'translateY(0)';
-});
+if (calendar && typeof calendar.on === 'function') {
+  calendar.on('eventDragStart', function(info) {
+    info.el.style.transform = 'translateY(-4px)';
+  });
+  calendar.on('eventDragStop', function(info) {
+    info.el.style.transform = 'translateY(0)';
+  });
+}
             }
 
 
@@ -1688,3 +1690,4 @@ if (!window.__schedulerContextMenuInit) {
   updateStats();
 } 
 });
+
