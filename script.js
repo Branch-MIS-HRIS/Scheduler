@@ -1434,16 +1434,24 @@ function copyEmployeeSchedule(empNo) {
   const emp = employees[empNo];
   if (!emp) {
     showToast('Employee not found.', 'error');
+    copiedEmployeeData = null;
     return;
   }
+
+  // Collect this employee's calendar events (serializable)
+  const events = calendar ? calendar.getEvents().filter(e => e.extendedProps && e.extendedProps.empNo === empNo) : [];
 
   copiedEmployeeData = {
     empNo: emp.empNo,
     name: emp.name,
-    shiftg: emp.shiftg || 'N/A'
+    events: events.map(e => ({
+      type: e.extendedProps.type,
+      start: e.startStr,
+      shiftCode: e.extendedProps.shiftCode || null
+    }))
   };
 
-  showToast(`Copied: ${emp.empNo} - ${emp.name} (${copiedEmployeeData.shiftg})`, 'info');
+  showToast(`Copied schedule for ${emp.empNo} - ${emp.name} (${copiedEmployeeData.events.length} events)`, 'info');
 }
 
 function pasteEmployeeSchedule(targetEmpNo) {
@@ -1458,20 +1466,83 @@ function pasteEmployeeSchedule(targetEmpNo) {
     return;
   }
 
-  target.empNo = copiedEmployeeData.empNo;
-  target.name = copiedEmployeeData.name;
-  target.shiftg = copiedEmployeeData.shiftg;
+  if (!calendar) {
+    showToast('Calendar not initialized.', 'error');
+    return;
+  }
 
-  showToast(`Pasted to ${targetEmpNo}: ${copiedEmployeeData.name} (${copiedEmployeeData.shiftg})`, 'success');
+  const srcEvents = copiedEmployeeData.events || [];
+  if (srcEvents.length === 0) {
+    showToast('No events to paste.', 'warn');
+    return;
+  }
+
+  let added = 0;
+  let skipped = 0;
+
+  srcEvents.forEach(ev => {
+    // Duplicate prevention: same date, same emp, same type
+    const exists = calendar.getEvents().some(e =>
+      e.extendedProps &&
+      e.extendedProps.empNo === targetEmpNo &&
+      e.startStr === ev.start &&
+      e.extendedProps.type === ev.type
+    );
+
+    if (exists) {
+      skipped++;
+      return;
+    }
+
+    const newExtended = {
+      type: ev.type,
+      empNo: targetEmpNo,
+      position: target.position,
+      shiftCode: ev.shiftCode || undefined
+    };
+
+    try {
+      newExtended.id = (crypto && crypto.randomUUID) ? crypto.randomUUID() : `copied-${Date.now()}-${Math.random().toString(36).slice(2,8)}`;
+    } catch (e) {
+      newExtended.id = `copied-${Date.now()}-${Math.random().toString(36).slice(2,8)}`;
+    }
+
+    calendar.addEvent({
+      title: target.name,
+      start: ev.start,
+      extendedProps: newExtended
+    });
+
+    added++;
+  });
+
+  // Re-run styling/conflicts/stats and persist
+  runConflictDetection();
+  updateStats();
   saveToLocalStorage();
+
+  showToast(`Pasted to ${targetEmpNo}: ${added} added, ${skipped} skipped (duplicates).`, added ? 'success' : 'warn');
 }
 
+// ...existing code...
+
 document.addEventListener('keydown', (e) => {
+  // Support Ctrl/Cmd + C/V and normalize key
+  const key = (e.key || '').toLowerCase();
+  if (!(e.ctrlKey || e.metaKey)) return;
+
   const hovered = document.querySelector('[data-empno]:hover');
   if (!hovered) return;
   const empNo = hovered.dataset.empno;
-  if (e.ctrlKey && e.key === 'c') copyEmployeeSchedule(empNo);
-  if (e.ctrlKey && e.key === 'v') pasteEmployeeSchedule(empNo);
+
+  if (key === 'c') {
+    e.preventDefault();
+    copyEmployeeSchedule(empNo);
+  }
+  if (key === 'v') {
+    e.preventDefault();
+    pasteEmployeeSchedule(empNo);
+  }
 });
 
 
