@@ -1411,171 +1411,278 @@ if (shiftSearchInput && shiftPresetSelect) {
                 }
             });
 
-        // --- CONTEXT MENU + COPY/PASTE LOGIC ---
-// track mouse position (for keyboard copy/paste detection)
-document.addEventListener('mousemove', function(e) {
-  lastMouseX = e.clientX;
-  lastMouseY = e.clientY;
-});
 
-document.addEventListener('contextmenu', function (e) {
-  // determine the element under the pointer reliably
-  const el = document.elementFromPoint(e.clientX, e.clientY);
-  if (!el) return;
-  const target = el.closest && el.closest('[data-empno]');
-  if (!target) return;
-  e.preventDefault();
-  e.stopPropagation();
-  const empNo = target.dataset.empno;
-  if (!empNo) return;
-  showContextMenu(e.pageX, e.pageY, empNo);
-});
+            // --- CONTEXT MENU + COPY/PASTE LOGIC ---
+if (!window.__schedulerContextMenuInit) {
+  window.__schedulerContextMenuInit = true;
 
-function showContextMenu(x, y, empNo) {
-  document.querySelector('#context-menu')?.remove();
-  const menu = document.createElement('div');
-  menu.id = 'context-menu';
-  menu.className = 'absolute bg-white border border-gray-300 rounded shadow-lg z-50';
-  menu.style.left = `${x}px`;
-  menu.style.top = `${y}px`;
-  menu.style.minWidth = '160px';
-  menu.innerHTML = `
-    <button id="copy-schedule" class="block w-full text-left px-4 py-2 hover:bg-gray-100">📋 Copy Schedule</button>
-    <button id="paste-schedule" class="block w-full text-left px-4 py-2 hover:bg-gray-100">📥 Paste Schedule</button>
-  `;
-  document.body.appendChild(menu);
-  document.getElementById('copy-schedule').onclick = () => { copyEmployeeSchedule(empNo); menu.remove(); };
-  document.getElementById('paste-schedule').onclick = () => { pasteEmployeeSchedule(empNo); menu.remove(); };
-  // remove menu on next click or Escape
-  const remover = (ev) => { menu.remove(); document.removeEventListener('keydown', keyHandler); document.removeEventListener('click', remover); };
-  const keyHandler = (ev) => { if (ev.key === 'Escape') remover(); };
-  document.addEventListener('click', remover, { once: true });
-  document.addEventListener('keydown', keyHandler);
-}
+  // Track mouse position for keyboard copy/paste detection
+  let lastMouseX = 0, lastMouseY = 0;
+  document.addEventListener('mousemove', function(e) {
+    lastMouseX = e.clientX;
+    lastMouseY = e.clientY;
+  });
 
-function copyEmployeeSchedule(empNo) {
-  const emp = employees[empNo];
-  if (!emp) {
-    showToast('Employee not found.', 'error');
-    copiedEmployeeData = null;
-    return;
+  document.addEventListener('contextmenu', function (e) {
+    const el = document.elementFromPoint(e.clientX, e.clientY);
+    if (!el) return;
+
+    const empTarget = el.closest('[data-empno]');
+    const calendarEl = el.closest('.fc-daygrid-day, .fc-timegrid-slot'); // FullCalendar day cells
+
+    if (empTarget) {
+      // Right-click on employee card → show Copy/Paste menu
+      e.preventDefault();
+      e.stopPropagation();
+      const empNo = empTarget.dataset.empno;
+      if (!empNo) return;
+      showContextMenu(e.pageX, e.pageY, empNo);
+    } else if (calendarEl && copiedEmployeeData) {
+      // Right-click on calendar day → show Paste-to-date menu
+      e.preventDefault();
+      e.stopPropagation();
+      const dateStr = calendarEl.getAttribute('data-date');
+      if (!dateStr) return;
+      showCalendarPasteMenu(e.pageX, e.pageY, dateStr);
+    }
+  });
+
+  function showContextMenu(x, y, empNo) {
+    document.querySelector('#context-menu')?.remove();
+    const menu = document.createElement('div');
+    menu.id = 'context-menu';
+    menu.className = 'absolute bg-white border border-gray-300 rounded shadow-lg z-50';
+    menu.style.left = `${x}px`;
+    menu.style.top = `${y}px`;
+    menu.style.minWidth = '160px';
+    menu.innerHTML = `
+      <button id="copy-schedule" class="block w-full text-left px-4 py-2 hover:bg-gray-100">📋 Copy Schedule</button>
+      <button id="paste-schedule" class="block w-full text-left px-4 py-2 hover:bg-gray-100">📥 Paste Schedule</button>
+    `;
+    document.body.appendChild(menu);
+
+    document.getElementById('copy-schedule').onclick = () => { copyEmployeeSchedule(empNo); menu.remove(); };
+    document.getElementById('paste-schedule').onclick = () => { pasteEmployeeSchedule(empNo); menu.remove(); };
+
+    const remover = () => {
+      menu.remove();
+      document.removeEventListener('keydown', keyHandler);
+      document.removeEventListener('click', remover);
+    };
+    const keyHandler = (ev) => { if (ev.key === 'Escape') remover(); };
+    document.addEventListener('click', remover, { once: true });
+    document.addEventListener('keydown', keyHandler);
   }
 
-  // Collect this employee's calendar events (serializable)
-  const events = calendar ? calendar.getEvents().filter(e => e.extendedProps && e.extendedProps.empNo === empNo) : [];
+  function showCalendarPasteMenu(x, y, dateStr) {
+    document.querySelector('#context-menu')?.remove();
+    const menu = document.createElement('div');
+    menu.id = 'context-menu';
+    menu.className = 'absolute bg-white border border-gray-300 rounded shadow-lg z-50';
+    menu.style.left = `${x}px`;
+    menu.style.top = `${y}px`;
+    menu.innerHTML = `
+      <button id="paste-schedule-calendar" class="block w-full text-left px-4 py-2 hover:bg-gray-100">
+        📅 Paste Schedule Here (${dateStr})
+      </button>
+    `;
+    document.body.appendChild(menu);
 
-  copiedEmployeeData = {
-    empNo: emp.empNo,
-    name: emp.name,
-    events: events.map(e => ({
-      type: e.extendedProps.type,
-      start: e.startStr,
-      shiftCode: e.extendedProps.shiftCode || null
-    }))
-  };
+    document.getElementById('paste-schedule-calendar').onclick = () => {
+      pasteCopiedScheduleToDate(dateStr);
+      menu.remove();
+    };
 
-  showToast(`Copied schedule for ${emp.empNo} - ${emp.name} (${copiedEmployeeData.events.length} events)`, 'info');
-}
-
-function pasteEmployeeSchedule(targetEmpNo) {
-  if (!copiedEmployeeData) {
-    showToast('Nothing copied yet.', 'error');
-    return;
+    const remover = () => {
+      menu.remove();
+      document.removeEventListener('keydown', keyHandler);
+      document.removeEventListener('click', remover);
+    };
+    const keyHandler = (ev) => { if (ev.key === 'Escape') remover(); };
+    document.addEventListener('click', remover, { once: true });
+    document.addEventListener('keydown', keyHandler);
   }
 
-  const target = employees[targetEmpNo];
-  if (!target) {
-    showToast('Target employee not found.', 'error');
-    return;
-  }
-
-  if (!calendar) {
-    showToast('Calendar not initialized.', 'error');
-    return;
-  }
-
-  const srcEvents = copiedEmployeeData.events || [];
-  if (srcEvents.length === 0) {
-    showToast('No events to paste.', 'warn');
-    return;
-  }
-
-  let added = 0;
-  let skipped = 0;
-
-  srcEvents.forEach(ev => {
-    // Duplicate prevention: same date, same emp, same type
-    const exists = calendar.getEvents().some(e =>
-      e.extendedProps &&
-      e.extendedProps.empNo === targetEmpNo &&
-      e.startStr === ev.start &&
-      e.extendedProps.type === ev.type
-    );
-
-    if (exists) {
-      skipped++;
+  function copyEmployeeSchedule(empNo) {
+    const emp = employees[empNo];
+    if (!emp) {
+      showToast('Employee not found.', 'error');
+      copiedEmployeeData = null;
       return;
     }
 
-    const newExtended = {
-      type: ev.type,
-      empNo: targetEmpNo,
-      position: target.position,
-      shiftCode: ev.shiftCode || undefined
+    const events = calendar ? calendar.getEvents().filter(e => e.extendedProps && e.extendedProps.empNo === empNo) : [];
+
+    copiedEmployeeData = {
+      empNo: emp.empNo,
+      name: emp.name,
+      events: events.map(e => ({
+        type: e.extendedProps.type,
+        start: e.startStr,
+        shiftCode: e.extendedProps.shiftCode || null
+      }))
     };
 
-    try {
-      newExtended.id = (crypto && crypto.randomUUID) ? crypto.randomUUID() : `copied-${Date.now()}-${Math.random().toString(36).slice(2,8)}`;
-    } catch (e) {
-      newExtended.id = `copied-${Date.now()}-${Math.random().toString(36).slice(2,8)}`;
+    showToast(`Copied schedule for ${emp.empNo} - ${emp.name} (${copiedEmployeeData.events.length} events)`, 'info');
+  }
+
+  function pasteEmployeeSchedule(targetEmpNo) {
+    if (!copiedEmployeeData) {
+      showToast('Nothing copied yet.', 'error');
+      return;
     }
 
-    calendar.addEvent({
-      title: target.name,
-      start: ev.start,
-      extendedProps: newExtended
+    const target = employees[targetEmpNo];
+    if (!target) {
+      showToast('Target employee not found.', 'error');
+      return;
+    }
+
+    if (!calendar) {
+      showToast('Calendar not initialized.', 'error');
+      return;
+    }
+
+    const srcEvents = copiedEmployeeData.events || [];
+    if (srcEvents.length === 0) {
+      showToast('No events to paste.', 'warn');
+      return;
+    }
+
+    let added = 0;
+    let skipped = 0;
+
+    srcEvents.forEach(ev => {
+      const exists = calendar.getEvents().some(e =>
+        e.extendedProps &&
+        e.extendedProps.empNo === targetEmpNo &&
+        e.startStr === ev.start &&
+        e.extendedProps.type === ev.type
+      );
+
+      if (exists) {
+        skipped++;
+        return;
+      }
+
+      const newExtended = {
+        type: ev.type,
+        empNo: targetEmpNo,
+        position: target.position,
+        shiftCode: ev.shiftCode || undefined,
+        id: (crypto?.randomUUID?.() ?? `copied-${Date.now()}-${Math.random().toString(36).slice(2,8)}`)
+      };
+
+      calendar.addEvent({
+        title: target.name,
+        start: ev.start,
+        extendedProps: newExtended
+      });
+      added++;
     });
 
-    added++;
-  });
+    runConflictDetection();
+    updateStats();
+    saveToLocalStorage();
 
-  // Re-run styling/conflicts/stats and persist
-  runConflictDetection();
-  updateStats();
-  saveToLocalStorage();
+    showToast(`Pasted to ${targetEmpNo}: ${added} added, ${skipped} skipped (duplicates).`, added ? 'success' : 'warn');
+  }
 
-  showToast(`Pasted to ${targetEmpNo}: ${added} added, ${skipped} skipped (duplicates).`, added ? 'success' : 'warn');
-}
+  // ✅ FIXED: Now global — works when right-clicking on the calendar
+  function pasteCopiedScheduleToDate(targetDateStr) {
+    if (!copiedEmployeeData || !calendar) {
+      showToast('No copied schedule available.', 'error');
+      return;
+    }
 
-document.addEventListener('keydown', (e) => {
-  // don't interfere while typing in inputs/textareas or when no modifier
-  const tag = (e.target && e.target.tagName) ? e.target.tagName.toLowerCase() : '';
-  if (tag === 'input' || tag === 'textarea' || e.target && e.target.isContentEditable) return;
-  if (!(e.ctrlKey || e.metaKey)) return;
+    const targetDate = new Date(targetDateStr);
+    if (isNaN(targetDate)) {
+      showToast('Invalid date target.', 'error');
+      return;
+    }
 
-  const key = (e.key || '').toLowerCase();
-  if (key !== 'c' && key !== 'v') return;
+    const empNo = copiedEmployeeData.empNo;
+    const emp = employees[empNo];
+    if (!emp) {
+      showToast('Original employee data missing.', 'error');
+      return;
+    }
 
-  // use last known mouse position to determine the element under cursor
-  const el = (typeof lastMouseX === 'number' && typeof lastMouseY === 'number')
-    ? document.elementFromPoint(lastMouseX, lastMouseY)
-    : document.activeElement;
-  if (!el) return;
-  const target = el.closest && el.closest('[data-empno]');
-  if (!target) return;
-  const empNo = target.dataset.empno;
-  if (!empNo) return;
+    let added = 0;
+    let skipped = 0;
 
-  e.preventDefault();
-  if (key === 'c') copyEmployeeSchedule(empNo);
-  if (key === 'v') pasteEmployeeSchedule(empNo);
+    const srcEvents = copiedEmployeeData.events || [];
+    if (srcEvents.length === 0) {
+      showToast('No events to paste.', 'warn');
+      return;
+    }
+
+    const firstSrcDate = new Date(srcEvents[0].start);
+    const offsetDays = Math.round((targetDate - firstSrcDate) / (1000 * 60 * 60 * 24));
+
+    srcEvents.forEach(ev => {
+      const newDate = new Date(ev.start);
+      newDate.setDate(newDate.getDate() + offsetDays);
+      const newDateStr = newDate.toISOString().split('T')[0];
+
+      const exists = calendar.getEvents().some(e =>
+        e.extendedProps.empNo === empNo &&
+        e.startStr === newDateStr &&
+        e.extendedProps.type === ev.type
+      );
+      if (exists) { skipped++; return; }
+
+      const newExtended = {
+        type: ev.type,
+        empNo: empNo,
+        position: emp.position,
+        shiftCode: ev.shiftCode || undefined,
+        id: (crypto?.randomUUID?.() ?? `pasted-${Date.now()}-${Math.random().toString(36).slice(2,8)}`)
+      };
+
+      calendar.addEvent({
+        title: emp.name,
+        start: newDateStr,
+        extendedProps: newExtended
+      });
+      added++;
+    });
+
+    runConflictDetection();
+    updateStats();
+    saveToLocalStorage();
+
+    showToast(`Pasted ${added} events starting ${targetDateStr} (${skipped} skipped)`, added ? 'success' : 'warn');
+  }
+
+  // Keyboard copy/paste shortcuts (Ctrl+C / Ctrl+V)
+  document.addEventListener('keydown', (e) => {
+    const tag = (e.target && e.target.tagName) ? e.target.tagName.toLowerCase() : '';
+    if (tag === 'input' || tag === 'textarea' || e.target?.isContentEditable) return;
+    if (!(e.ctrlKey || e.metaKey)) return;
+
+    const key = (e.key || '').toLowerCase();
+    if (key !== 'c' && key !== 'v') return;
+
+    const el = (typeof lastMouseX === 'number' && typeof lastMouseY === 'number')
+      ? document.elementFromPoint(lastMouseX, lastMouseY)
+      : document.activeElement;
+    if (!el) return;
+
+    const target = el.closest?.('[data-empno]');
+    if (!target) return;
+
+    const empNo = target.dataset.empno;
+    if (!empNo) return;
+
+    e.preventDefault();
+    if (key === 'c') copyEmployeeSchedule(empNo);
+    if (key === 'v') pasteEmployeeSchedule(empNo);
 });
 
-
-            initializeCalendar();
-            initializeDraggable();
-            addEmployeeRow();
-            loadFromLocalStorage();
-            updateStats();
-            
-        });
+// --- Initialization calls ---
+initializeCalendar();
+initializeDraggable();
+addEmployeeRow();
+loadFromLocalStorage();
+updateStats();
