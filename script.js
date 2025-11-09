@@ -461,6 +461,10 @@ eventReceive: function(info) {
     saveToLocalStorage();
   }
 
+  setTimeout(() => {
+    try { decorateCalendarEvents(); } catch (e) {}
+  }, 0);
+
 },
 
     /**
