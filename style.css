@@ -85,14 +85,32 @@ aside h2 {
 
 /* ---------- Pills (FC + schedule) ---------- */
 .fc-event-pill, .schedule-pill {
-  border-radius: 999px;
-  padding: 4px 10px;
+  border-radius: 12px;
+  padding: 4px 8px;
   font-weight: 600;
   font-size: 11px;
   cursor: pointer;
   transition: all 0.2s ease;
   box-shadow: 0 6px 18px rgba(2,6,23,0.06);
-  display: inline-flex;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  box-sizing: border-box;
+  margin: 2px 0;
+}
+
+.fc-daygrid-event,
+.fc-timegrid-event {
+  display: flex;
+  align-items: stretch;
+  width: 100%;
+}
+
+.fc-daygrid-event .fc-event-main,
+.fc-timegrid-event .fc-event-main {
+  flex: 1 1 auto;
+  display: flex;
   align-items: center;
   justify-content: center;
 }

@@ -59,9 +59,9 @@ function getGradientFromBaseColor(hex, type = 'work') {
 }
 
             // --- COPY / PASTE SUPPORT ---
-let copiedEmployeeSchedule = null;
-let copiedEmployeeNo = null;
-let copiedEmployeeData = null; // previously undeclared
+            let copiedEmployeeSchedule = null;
+            let copiedEmployeeNo = null;
+            let copiedEmployeeData = null; // previously undeclared
             
             // FullCalendar instances
             let calendar;
@@ -72,6 +72,7 @@ let copiedEmployeeData = null; // previously undeclared
             let currentDeletingEvent = null;
             // track the hovered schedule pill for reliable key-based copy/paste detection
             let hoveredScheduleId = null;
+            let pasteHistory = [];
             
             // Configs
             const positionOptions = ['Branch Head', 'Site Supervisor', 'OIC', 'Mac Expert', 'Cashier'];
@@ -1508,6 +1509,7 @@ if (!window.__schedulerContextMenuInit) {
   let selectedTargetDates = new Set();
   let lastMouseX = 0, lastMouseY = 0;
   hoveredScheduleId = null;
+  pasteHistory = [];
   let isDragging = false, dragGhost = null;
   let isSelectingDates = false, dateSelectStartEl = null;
 
@@ -1578,13 +1580,19 @@ if (!window.__schedulerContextMenuInit) {
   function copySelectedSchedules() {
     const pointerPill = document.elementFromPoint(lastMouseX, lastMouseY)?.closest('.schedule-pill');
     const pointerId = getScheduleIdFromElement(pointerPill);
-    const fallbackHoveredId = hoveredScheduleId || pointerId;
+    const effectiveHoverId = pointerId || hoveredScheduleId;
 
-    const idsToCopy = selectedSchedules.size
-      ? Array.from(selectedSchedules)
-      : fallbackHoveredId
-        ? [fallbackHoveredId]
-        : [];
+    let idsToCopy = [];
+
+    if (selectedSchedules.size > 1) {
+      idsToCopy = Array.from(selectedSchedules);
+    } else if (pointerId) {
+      idsToCopy = [pointerId];
+    } else if (selectedSchedules.size === 1) {
+      idsToCopy = Array.from(selectedSchedules);
+    } else if (effectiveHoverId) {
+      idsToCopy = [effectiveHoverId];
+    }
 
     if (!idsToCopy.length) return showToastWrapper('No schedule selected.', 'warn');
     if (!calendar) return showToastWrapper('Calendar not ready.', 'error');
@@ -1607,6 +1615,7 @@ if (!window.__schedulerContextMenuInit) {
     const uniqueDates = Array.from(new Set(datesArray)).sort();
     const baseDate = new Date(copiedSchedules[0].date);
     let added = 0, skipped = 0;
+    const createdIdsForBatch = [];
 
     uniqueDates.forEach(targetStr => {
       const targetDate = new Date(targetStr);
@@ -1621,25 +1630,63 @@ if (!window.__schedulerContextMenuInit) {
           e.startStr === newDateStr
         );
         if (exists) { skipped++; return; }
-        calendar.addEvent({
+        const newId = crypto?.randomUUID?.() ?? `sched-${Date.now()}-${Math.random().toString(36).slice(2,8)}`;
+        const newEvent = calendar.addEvent({
+          id: newId,
           title: employees?.[src.empNo]?.name ?? src.empNo,
           start: newDateStr,
           extendedProps: {
-            id: crypto?.randomUUID?.() ?? `sched-${Date.now()}-${Math.random().toString(36).slice(2,8)}`,
+            id: newId,
             empNo: src.empNo,
             shiftCode: src.shiftCode,
             type: src.type
           }
         });
+        if (newEvent) {
+          const createdId = newEvent.extendedProps?.id || newEvent.id || newId;
+          createdIdsForBatch.push(createdId);
+        }
         added++;
       });
     });
+
+    if (createdIdsForBatch.length) {
+      pasteHistory.push(createdIdsForBatch);
+      if (pasteHistory.length > 20) pasteHistory.shift();
+    }
 
     runConflictDetection();
     updateStats();
     saveToLocalStorage();
     showToastWrapper(`Pasted ${added} schedule${added !== 1 ? 's' : ''} (${skipped} skipped).`, added ? 'success' : 'warn');
     clearTargetDateSelection();
+  }
+
+  function undoLastPaste() {
+    if (!calendar) return showToastWrapper('Calendar not ready.', 'error');
+    if (!pasteHistory.length) return showToastWrapper('Nothing to undo.', 'warn');
+
+    const lastBatch = pasteHistory.pop();
+    let removed = 0;
+    const events = calendar.getEvents();
+
+    lastBatch.forEach(id => {
+      const match = events.find(e => String(e.extendedProps?.id) === String(id) || String(e.id) === String(id));
+      if (match) {
+        match.remove();
+        removed++;
+      }
+    });
+
+    if (!removed) {
+      showToastWrapper('Nothing to undo.', 'warn');
+      return;
+    }
+
+    runConflictDetection();
+    updateStats();
+    saveToLocalStorage();
+    showToastWrapper(`Undid paste (${removed} schedule${removed !== 1 ? 's' : ''} removed).`, 'info');
   }
 
   // ---------- CONTEXT MENU ----------
@@ -1709,6 +1756,10 @@ if (!window.__schedulerContextMenuInit) {
       if (selectedTargetDates.size) pasteSchedulesToDates(Array.from(selectedTargetDates));
       else if (dateEl) pasteSchedulesToDates([dateEl.getAttribute('data-date')]);
       else showToastWrapper('Hover over a date or select target dates to paste.', 'warn');
+    }
+    if (key === 'z') {
+      e.preventDefault();
+      undoLastPaste();
     }
   });
 
