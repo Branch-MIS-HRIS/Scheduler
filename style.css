@@ -276,3 +276,12 @@ aside h2 { font-weight:700; color:#0f172a; letter-spacing: -0.2px; }
   transform: scale(1.05);
   transition: transform 0.2s ease;
 }
+.hover-preview {
+  background-color: rgba(59, 130, 246, 0.3) !important; /* blue overlay */
+  border: 2px dashed #3b82f6 !important;
+  transition: background 0.1s;
+}
+.drag-ghost {
+  opacity: 0.9;
+  font-size: 14px;
+}

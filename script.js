@@ -1454,6 +1454,58 @@ startScheduler();
 if (!window.__schedulerContextMenuInit) {
   window.__schedulerContextMenuInit = true;
 
+  // ---------- DRAG GHOST / HOVER PREVIEW ----------
+function createDragGhost(count) {
+  removeDragGhost();
+  dragGhost = document.createElement('div');
+  dragGhost.className = 'drag-ghost fixed z-50 p-2 rounded border border-gray-300 bg-white shadow text-sm font-semibold';
+  dragGhost.style.pointerEvents = 'none';
+  dragGhost.style.left = `${lastMouseX+12}px`;
+  dragGhost.style.top = `${lastMouseY+12}px`;
+  dragGhost.style.minWidth = '140px';
+  dragGhost.style.textAlign = 'center';
+  dragGhost.innerHTML = `📋 ${count} schedule${count>1?'s':''} — drag to date`;
+  document.body.appendChild(dragGhost);
+}
+
+function removeDragGhost() {
+  dragGhost?.remove();
+  dragGhost = null;
+  // remove all hover preview highlights
+  qAll('.fc-daygrid-day.hover-preview, .fc-timegrid-slot.hover-preview')
+    .forEach(el => el.classList.remove('hover-preview'));
+}
+
+// Update ghost position and highlight hovered date
+document.addEventListener('mousemove', e => {
+  if (isDragging && dragGhost) {
+    dragGhost.style.left = `${e.pageX + 12}px`;
+    dragGhost.style.top = `${e.pageY + 12}px`;
+
+    // Highlight hovered date
+    const el = document.elementFromPoint(e.clientX, e.clientY)?.closest('.fc-daygrid-day, .fc-timegrid-slot');
+    qAll('.fc-daygrid-day.hover-preview, .fc-timegrid-slot.hover-preview')
+      .forEach(prev => prev.classList.remove('hover-preview'));
+    if (el) el.classList.add('hover-preview');
+  } else if (isSelectingDates && dateSelectStartEl) {
+    const cur = document.elementFromPoint(e.clientX, e.clientY);
+    const hoverDay = cur?.closest('.fc-daygrid-day, .fc-timegrid-slot');
+    if (!hoverDay) return;
+    const start = new Date(dateSelectStartEl.getAttribute('data-date'));
+    const end = new Date(hoverDay.getAttribute('data-date'));
+    const s = start < end ? start : end;
+    const t = start < end ? end : start;
+    const datesRange = [];
+    for (let d = new Date(s); d <= t; d.setDate(d.getDate()+1))
+      datesRange.push(new Date(d).toISOString().split('T')[0]);
+    clearTargetDateSelection();
+    datesRange.forEach(ds => {
+      const cell = document.querySelector(`.fc-daygrid-day[data-date="${ds}"], .fc-timegrid-slot[data-date="${ds}"]`);
+      if (cell) { selectedTargetDates.add(ds); cell.classList.add('selected-date'); }
+    });
+  }
+});
+
   // ---------- STATE ----------
   let copiedSchedules = [];
   let selectedSchedules = new Set();
