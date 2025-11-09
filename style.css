@@ -63,13 +63,10 @@ aside {
 #draggable-cards-container > div {
   transition: transform 200ms cubic-bezier(.2,.9,.3,1), box-shadow 200ms;
   border-radius: 12px;
-  padding: 6px 10px;
-  font-weight: 600;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: #fff;
+  padding: 0; /* The pill provides its own padding */
   box-shadow: 0 6px 18px rgba(2,6,23,0.06);
+  background: none !important; /* Let JS-set gradient stay */
+  border-left: 6px solid currentColor; /* Color is set inline via JS */
 }
 #draggable-cards-container > div[data-type="work"] {
   background: linear-gradient(135deg, #2563eb, #3b82f6);
