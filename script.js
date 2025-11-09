@@ -328,7 +328,8 @@ function loadFromLocalStorage() {
         const restStyle = `background:${getGradientFromBaseColor(color, 'rest')}; color:${color}; border:2px solid ${color};`;
 
         const cardHtml = `
-          <div class="p-3 bg-white rounded-lg shadow-sm border border-gray-200" data-empno="${emp.empNo}">
+          <div class="p-3 rounded-lg shadow-sm border border-gray-200" data-empno="${emp.empNo}"
+               style="border-left: 6px solid ${color}; background: linear-gradient(to right, ${color}22, ${color}08);">
             <div class="flex items-center justify-between">
               <div>
                 <div class="font-medium text-gray-800">${emp.name}</div>
