@@ -854,7 +854,7 @@ Object.values(employees).forEach(emp => {
   // --- Draggable Card UI ---
 const cardHtml = `
   <div class="p-3 rounded-lg shadow-sm border border-gray-200" data-empno="${emp.empNo}"
-       style="border-left: 6px solid ${color}; background: linear-gradient(to right, ${color}22, ${color}10);">
+       style="border-left: 6px solid ${color}; background: linear-gradient(to right, ${color}22, ${color}08);">
     <div class="flex items-center justify-between">
       <div>
         <div class="font-medium text-gray-800">${emp.name}</div>
