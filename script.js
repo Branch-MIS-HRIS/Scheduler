@@ -1413,6 +1413,26 @@ if (shiftSearchInput && shiftPresetSelect) {
                 }
             });
 
+            // --- INITIAL STARTUP (ensure calendar and data are initialized) ---
+            try {
+              initializeCalendar();
+            } catch (err) {
+              console.error('initializeCalendar failed', err);
+            }
+            
+            try {
+              loadFromLocalStorage();
+            } catch (err) {
+              console.error('loadFromLocalStorage failed', err);
+            }
+            
+            // Ensure at least one editable employee row exists in the table
+            try {
+              if (!employeeTableBody || employeeTableBody.querySelectorAll('tr').length === 0) {
+                addEmployeeRow();
+              }
+            } catch (err) { /* silent */ }
+
 // --- FULL SCHEDULER COPY/PASTE + DRAG SELECT (PLUG-AND-PLAY) ---
 if (!window.__schedulerContextMenuInit) {
   window.__schedulerContextMenuInit = true;
