@@ -70,8 +70,8 @@ let copiedEmployeeData = null; // previously undeclared
             // State for modals
             let currentDroppingEvent = null;
             let currentDeletingEvent = null;
-            // track last mouse position for reliable key-based copy/paste target detection
-            let lastMouseX = 0, lastMouseY = 0;
+            // track the hovered schedule pill for reliable key-based copy/paste detection
+            let hoveredScheduleId = null;
             
             // Configs
             const positionOptions = ['Branch Head', 'Site Supervisor', 'OIC', 'Mac Expert', 'Cashier'];
@@ -1453,22 +1453,49 @@ function startScheduler() {
 }
 
 // --- Event decoration for FullCalendar (plug-and-play) ---
+function getScheduleIdFromElement(el) {
+  if (!el) return null;
+  const idCarrier = el.closest('[data-id], [data-event-id], [data-schedule-id], [data-sched-id]');
+  if (!idCarrier) return null;
+  return (
+    idCarrier.dataset?.id ||
+    idCarrier.getAttribute('data-event-id') ||
+    idCarrier.getAttribute('data-schedule-id') ||
+    idCarrier.getAttribute('data-sched-id') ||
+    idCarrier.getAttribute('data-id') ||
+    null
+  );
+}
+
 function decorateCalendarEvents() {
   if (!calendar) return;
   const allEvents = calendar.getEvents();
   allEvents.forEach(ev => {
     // prefer FC's data-event-id (guaranteed by the eventDidMount patch above)
     const el = document.querySelector(`[data-event-id="${ev.id}"]`) || document.querySelector(`[data-id="${ev.extendedProps?.id || ev.id}"]`);
-     if (!el) return;
-     if (!el.classList.contains('schedule-pill')) el.classList.add('schedule-pill');
-    if (!el.dataset.id) el.dataset.id = ev.extendedProps?.id || ev.id;
- 
-     // Attach click for multi-select Ctrl/Cmd
-     el.onclick = e => {
-       if (e.ctrlKey || e.metaKey) toggleScheduleSelection(el, true);
-       else toggleScheduleSelection(el, false);
-     };
-   });
+    if (!el) return;
+    if (!el.classList.contains('schedule-pill')) el.classList.add('schedule-pill');
+    const computedId = getScheduleIdFromElement(el) || ev.extendedProps?.id || ev.id;
+    if (computedId) el.dataset.id = computedId;
+
+    // Attach click for multi-select Ctrl/Cmd
+    el.onclick = e => {
+      if (e.ctrlKey || e.metaKey) toggleScheduleSelection(el, true);
+      else toggleScheduleSelection(el, false);
+    };
+
+    el.onmouseenter = () => {
+      const id = getScheduleIdFromElement(el) || ev.extendedProps?.id || ev.id;
+      if (id) hoveredScheduleId = id;
+    };
+
+    el.onmouseleave = () => {
+      const id = getScheduleIdFromElement(el) || ev.extendedProps?.id || ev.id;
+      if (hoveredScheduleId === id) {
+        hoveredScheduleId = null;
+      }
+    };
+  });
 }
             
             // --- FULL SCHEDULER COPY/PASTE + DRAG SELECT (PLUG-AND-PLAY) ---
@@ -1480,6 +1507,7 @@ if (!window.__schedulerContextMenuInit) {
   let selectedSchedules = new Set();
   let selectedTargetDates = new Set();
   let lastMouseX = 0, lastMouseY = 0;
+  hoveredScheduleId = null;
   let isDragging = false, dragGhost = null;
   let isSelectingDates = false, dateSelectStartEl = null;
 
@@ -1487,7 +1515,18 @@ if (!window.__schedulerContextMenuInit) {
   const qAll = (sel, root = document) => Array.from(root.querySelectorAll(sel));
   const q = (sel, root = document) => root.querySelector(sel);
 
-  const updateMouse = e => { lastMouseX = e.clientX; lastMouseY = e.clientY; };
+  const updateMouse = e => {
+    lastMouseX = e.clientX;
+    lastMouseY = e.clientY;
+
+    const pill = e.target.closest?.('.schedule-pill');
+    if (pill) {
+      const id = getScheduleIdFromElement(pill);
+      if (id) hoveredScheduleId = id;
+    } else if (!document.elementFromPoint(lastMouseX, lastMouseY)?.closest('.schedule-pill')) {
+      hoveredScheduleId = null;
+    }
+  };
   document.addEventListener('mousemove', updateMouse);
 
   function showToastWrapper(msg, type = 'info') { showToast?.(msg, type); }
@@ -1537,10 +1576,20 @@ if (!window.__schedulerContextMenuInit) {
 
   // ---------- COPY / PASTE ----------
   function copySelectedSchedules() {
-    if (selectedSchedules.size === 0) return showToastWrapper('No schedule selected.', 'warn');
+    const pointerPill = document.elementFromPoint(lastMouseX, lastMouseY)?.closest('.schedule-pill');
+    const pointerId = getScheduleIdFromElement(pointerPill);
+    const fallbackHoveredId = hoveredScheduleId || pointerId;
+
+    const idsToCopy = selectedSchedules.size
+      ? Array.from(selectedSchedules)
+      : fallbackHoveredId
+        ? [fallbackHoveredId]
+        : [];
+
+    if (!idsToCopy.length) return showToastWrapper('No schedule selected.', 'warn');
     if (!calendar) return showToastWrapper('Calendar not ready.', 'error');
     const allEvents = calendar.getEvents();
-    copiedSchedules = Array.from(selectedSchedules).map(id =>
+    copiedSchedules = idsToCopy.map(id =>
       allEvents.find(e => String(e.extendedProps?.id) === String(id) || String(e.id) === String(id))
     ).filter(Boolean).map(ev => ({
       empNo: ev.extendedProps.empNo,
