@@ -22,6 +22,38 @@ function shadeColor(color, percent) {
             let employees = {};
 let employeeColors = JSON.parse(localStorage.getItem('employeeColors')) || {};
 
+const BASE_EMPLOYEE_COLORS = [
+  '#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#14b8a6',
+  '#ef4444', '#22c55e', '#eab308', '#0ea5e9', '#6366f1', '#84cc16',
+  '#d946ef', '#0d9488', '#fb923c', '#a855f7', '#475569', '#f97316',
+  '#64748b', '#60a5fa', '#65a30d', '#f43f5e', '#059669', '#7c3aed',
+  '#e11d48', '#9333ea', '#2563eb', '#9ca3af', '#15803d'
+];
+
+function ensureEmployeeColor(empNo) {
+  if (!empNo) return null;
+  if (!employeeColors) employeeColors = {};
+  let color = employeeColors[empNo];
+  if (!color) {
+    const usedColors = Object.values(employeeColors);
+    const availableColors = BASE_EMPLOYEE_COLORS.filter(c => !usedColors.includes(c));
+    if (availableColors.length) {
+      color = availableColors[0];
+    } else {
+      const key = String(empNo);
+      let hash = 0;
+      for (let i = 0; i < key.length; i++) {
+        hash = ((hash << 5) - hash) + key.charCodeAt(i);
+        hash |= 0;
+      }
+      color = BASE_EMPLOYEE_COLORS[Math.abs(hash) % BASE_EMPLOYEE_COLORS.length];
+    }
+    employeeColors[empNo] = color;
+    try { localStorage.setItem('employeeColors', JSON.stringify(employeeColors)); } catch (e) {}
+  }
+  return color;
+}
+
 /* ====== MOVED HELPERS: make gradient/color helpers top-level so other code can use them ====== */
 function rgbToHsl(r, g, b) {
   r /= 255; g /= 255; b /= 255;
@@ -306,23 +338,8 @@ function loadFromLocalStorage() {
       // ensure employeeColors is available (persisted earlier by saveToLocalStorage)
       employeeColors = JSON.parse(localStorage.getItem('employeeColors')) || employeeColors || {};
 
-      const baseColors = [
-        '#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#14b8a6',
-        '#ef4444', '#22c55e', '#eab308', '#0ea5e9', '#6366f1', '#84cc16',
-        '#d946ef', '#0d9488', '#fb923c', '#a855f7', '#475569', '#f97316',
-        '#64748b', '#60a5fa', '#65a30d', '#f43f5e', '#059669', '#7c3aed',
-        '#e11d48', '#9333ea', '#2563eb', '#9ca3af', '#15803d'
-      ];
-
       Object.values(employees).forEach(emp => {
-        // assign or reuse a color (same logic used in saveAndGenerate)
-        if (!employeeColors[emp.empNo]) {
-          const used = Object.values(employeeColors);
-          const available = baseColors.filter(c => !used.includes(c));
-          const pick = available.length ? available[0] : baseColors[Object.keys(employeeColors).length % baseColors.length];
-          employeeColors[emp.empNo] = pick;
-        }
-        const color = employeeColors[emp.empNo];
+        const color = ensureEmployeeColor(emp.empNo);
 
         const workEventData = {
           title: emp.name,
@@ -404,7 +421,17 @@ eventReceive: function(info) {
   const dateStr = newEvent.startStr;
 
   // ✅ Get employee assigned color
-  const color = employeeColors[droppedEmpNo];
+  const color = ensureEmployeeColor(droppedEmpNo);
+  const existingId = newEvent.extendedProps?.id || newEvent.id;
+  const assignedId = existingId || (() => {
+    try { return (crypto && crypto.randomUUID) ? crypto.randomUUID() : Date.now().toString(); }
+    catch (e) { return Date.now().toString(); }
+  })();
+
+  if (!existingId) {
+    try { newEvent.setExtendedProp('id', assignedId); } catch (e) {}
+    try { newEvent.setProp('id', assignedId); } catch (e) {}
+  }
 
   // ✅ Apply gradient + pill class based on type
   if (type === "work") {
@@ -429,12 +456,6 @@ eventReceive: function(info) {
   }
 
   // ✅ Ensure unique ID
-  try {
-    newEvent.setExtendedProp('id', (crypto && crypto.randomUUID) ? crypto.randomUUID() : Date.now().toString());
-  } catch (e) {
-    newEvent.setExtendedProp('id', Date.now().toString());
-  }
-
   // ✅ Duplicate check
   const allEvents = calendar.getEvents();
   const isDuplicate = allEvents.find(e => 
@@ -461,9 +482,9 @@ eventReceive: function(info) {
     saveToLocalStorage();
   }
 
-  setTimeout(() => {
-    try { decorateCalendarEvents(); } catch (e) {}
-  }, 0);
+  const scheduleDecorate = () => { try { decorateCalendarEvents(); } catch (e) {} };
+  if (typeof requestAnimationFrame === 'function') requestAnimationFrame(scheduleDecorate);
+  else setTimeout(scheduleDecorate, 0);
 
 },
 
@@ -545,36 +566,7 @@ eventReceive: function(info) {
         return;
       }
 
-      // --- Persistent Unique Employee Color Assignment (solid vs border) ---
-      const baseColors = [
-        '#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#14b8a6',
-        '#ef4444', '#22c55e', '#eab308', '#0ea5e9', '#6366f1', '#84cc16',
-        '#d946ef', '#0d9488', '#fb923c', '#a855f7', '#475569', '#f97316',
-        '#64748b', '#60a5fa', '#65a30d', '#f43f5e', '#0ea5e9', '#059669',
-        '#7c3aed', '#e11d48', '#9333ea', '#2563eb', '#9ca3af', '#15803d'
-      ];
-
-      if (!employeeColors[empNo]) {
-        const usedColors = Object.values(employeeColors);
-        const availableColors = baseColors.filter(c => !usedColors.includes(c));
-        let color;
-        if (availableColors.length) {
-          color = availableColors[0];
-        } else {
-          // deterministic fallback when all base colors are used:
-          // hash the employee number/string to pick a color index
-          const key = String(empNo || '');
-          let hash = 0;
-          for (let i = 0; i < key.length; i++) {
-            hash = ((hash << 5) - hash) + key.charCodeAt(i);
-            hash |= 0; // convert to 32bit int
-          }
-          color = baseColors[Math.abs(hash) % baseColors.length];
-        }
-        employeeColors[empNo] = color;
-        try { localStorage.setItem('employeeColors', JSON.stringify(employeeColors)); } catch (e) {}
-      }
-      const color = employeeColors[empNo];
+      const color = ensureEmployeeColor(empNo);
 
 
       if (type === 'work') {
@@ -879,23 +871,7 @@ Object.values(employees).forEach(emp => {
   };
 
   // --- Assign or reuse color for employee ---
-  const baseColors = [
-    '#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#14b8a6',
-    '#ef4444', '#22c55e', '#eab308', '#0ea5e9', '#6366f1', '#84cc16',
-    '#d946ef', '#0d9488', '#fb923c', '#a855f7', '#475569', '#f97316',
-    '#64748b', '#60a5fa', '#65a30d', '#f43f5e', '#059669', '#7c3aed',
-    '#e11d48', '#9333ea', '#2563eb', '#9ca3af', '#15803d'
-  ];
-
-  if (!employeeColors[emp.empNo]) {
-    const usedColors = Object.values(employeeColors);
-    const availableColors = baseColors.filter(c => !usedColors.includes(c));
-    const color = availableColors.length
-      ? availableColors[0]
-      : baseColors[Object.keys(employeeColors).length % baseColors.length];
-    employeeColors[emp.empNo] = color;
-  }
-  const color = employeeColors[emp.empNo];
+  const color = ensureEmployeeColor(emp.empNo);
 
   // --- Draggable Card UI ---
 const cardHtml = `
@@ -1498,15 +1474,24 @@ function decorateCalendarEvents() {
     if (computedId) el.dataset.id = computedId;
 
     // Attach click for multi-select Ctrl/Cmd
-    el.onclick = e => {
-      if (e.ctrlKey || e.metaKey) {
-        e.preventDefault();
-        e.stopPropagation();
-        toggleScheduleSelection(el, true);
-      } else {
+    if (!el.__scheduleSelectionHandler) {
+      const handler = e => {
+        if (e.ctrlKey || e.metaKey) {
+          e.preventDefault();
+          e.stopPropagation();
+          toggleScheduleSelection(el, true);
+          return;
+        }
         toggleScheduleSelection(el, false);
-      }
-    };
+      };
+      el.addEventListener('click', handler);
+      Object.defineProperty(el, '__scheduleSelectionHandler', {
+        value: handler,
+        enumerable: false,
+        configurable: true,
+        writable: false
+      });
+    }
 
     el.onmouseenter = () => {
       const id = getScheduleIdFromElement(el) || ev.extendedProps?.id || ev.id;
