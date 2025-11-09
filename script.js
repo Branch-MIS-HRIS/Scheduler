@@ -485,6 +485,23 @@ eventReceive: function(info) {
      * Fired after an event is rendered. Used for tooltips and styling.
      */
     eventDidMount: function(info) {
+      // Ensure the event has a persistent id in extendedProps so selection/copy/paste works.
+      try {
+        if (!info.event.extendedProps?.id) {
+          const fallbackId = (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : (info.event.id || `evt-${Date.now()}`);
+          info.event.setExtendedProp('id', fallbackId);
+        }
+      } catch (e) {}
+
+      // Expose stable attributes on the DOM element for other code to query.
+      try {
+        // FullCalendar may already add data-event-id, but ensure it's present and also add a data-id that maps to our persisted id.
+        info.el.setAttribute('data-event-id', info.event.id);
+        info.el.setAttribute('data-id', info.event.extendedProps?.id || info.event.id);
+        // mark as a schedule-pill so selection/drag/context menu use a consistent selector
+        info.el.classList.add('schedule-pill');
+      } catch (e) {}
+
       // Apply forceStyle if present (ensures drag/drop keeps gradient)
       if (info.event.extendedProps.forceStyle) {
         Object.entries(info.event.extendedProps.forceStyle).forEach(([k,v]) => {
@@ -615,7 +632,7 @@ eventReceive: function(info) {
       } else {
         info.el.classList.remove('fc-event-conflict');
       }
-
+      
       const shiftInfo = shiftCode ? ` (${shiftCode})` : '';
       const title = `${info.event.title} (${emp.position})\nType: ${type.charAt(0).toUpperCase() + type.slice(1)}${shiftInfo}`;
       info.el.title = title;
@@ -1440,23 +1457,21 @@ function decorateCalendarEvents() {
   if (!calendar) return;
   const allEvents = calendar.getEvents();
   allEvents.forEach(ev => {
-    const el = document.querySelector(`[data-event-id="${ev.id}"]`);
-    if (!el) return;
-    if (!el.classList.contains('schedule-pill')) el.classList.add('schedule-pill');
+    // prefer FC's data-event-id (guaranteed by the eventDidMount patch above)
+    const el = document.querySelector(`[data-event-id="${ev.id}"]`) || document.querySelector(`[data-id="${ev.extendedProps?.id || ev.id}"]`);
+     if (!el) return;
+     if (!el.classList.contains('schedule-pill')) el.classList.add('schedule-pill');
     if (!el.dataset.id) el.dataset.id = ev.extendedProps?.id || ev.id;
-
-    // Attach click for multi-select Ctrl/Cmd
-    el.onclick = e => {
-      if (e.ctrlKey || e.metaKey) toggleScheduleSelection(el, true);
-      else toggleScheduleSelection(el, false);
-    };
-  });
+ 
+     // Attach click for multi-select Ctrl/Cmd
+     el.onclick = e => {
+       if (e.ctrlKey || e.metaKey) toggleScheduleSelection(el, true);
+       else toggleScheduleSelection(el, false);
+     };
+   });
 }
-
-// --- Start everything ---
-startScheduler();
-
-// --- FULL SCHEDULER COPY/PASTE + DRAG SELECT (PLUG-AND-PLAY) ---
+            
+            // --- FULL SCHEDULER COPY/PASTE + DRAG SELECT (PLUG-AND-PLAY) ---
 if (!window.__schedulerContextMenuInit) {
   window.__schedulerContextMenuInit = true;
 
@@ -1733,5 +1748,4 @@ if (!window.__schedulerContextMenuInit) {
     if (copiedSchedules.length) showToastWrapper(`Copied ${copiedSchedules.length} schedule${copiedSchedules.length>1?'s':''}.`, 'info');
   }
 }
-
 });
