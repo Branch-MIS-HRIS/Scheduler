@@ -316,6 +316,10 @@ function saveToLocalStorage() {
     const allEvents = calendar ? calendar.getEvents().map(e => ({
       title: e.title,
       start: e.startStr,
+      classNames: (() => {
+        const classes = e?.getProp ? e.getProp('classNames') : e.classNames;
+        return Array.isArray(classes) ? classes : undefined;
+      })(),
       extendedProps: e.extendedProps
     })) : [];
     localStorage.setItem('employees', JSON.stringify(employees));
@@ -341,17 +345,42 @@ function loadFromLocalStorage() {
       Object.values(employees).forEach(emp => {
         const color = ensureEmployeeColor(emp.empNo);
 
+        const workGradient = getGradientFromBaseColor(color, 'work');
+        const restGradient = getGradientFromBaseColor(color, 'rest');
+
         const workEventData = {
           title: emp.name,
-          extendedProps: { type: 'work', empNo: emp.empNo, position: emp.position }
+          classNames: ['fc-event-pill', 'fc-event-work'],
+          extendedProps: {
+            type: 'work',
+            empNo: emp.empNo,
+            position: emp.position,
+            forceStyle: {
+              background: workGradient,
+              backgroundImage: 'none',
+              color: '#fff',
+              border: 'none'
+            }
+          }
         };
         const restEventData = {
           title: emp.name,
-          extendedProps: { type: 'rest', empNo: emp.empNo, position: emp.position }
+          classNames: ['fc-event-pill', 'fc-event-rest'],
+          extendedProps: {
+            type: 'rest',
+            empNo: emp.empNo,
+            position: emp.position,
+            forceStyle: {
+              background: restGradient,
+              backgroundImage: 'none',
+              color,
+              border: `2px solid ${color}`
+            }
+          }
         };
 
-        const workStyle = `background:${getGradientFromBaseColor(color, 'work')}; color:#fff; border:none;`;
-        const restStyle = `background:${getGradientFromBaseColor(color, 'rest')}; color:${color}; border:2px solid ${color};`;
+        const workStyle = `background:${workGradient}; color:#fff; border:none;`;
+        const restStyle = `background:${restGradient}; color:${color}; border:2px solid ${color};`;
 
         const cardHtml = `
           <div class="p-3 rounded-lg shadow-sm border border-gray-200" data-empno="${emp.empNo}"
@@ -379,11 +408,37 @@ function loadFromLocalStorage() {
   
     if (storedEvents && storedEvents.length > 0 && calendar) {
       storedEvents.forEach(ev => {
-        calendar.addEvent({
+        const addedEvent = calendar.addEvent({
           title: ev.title,
           start: ev.start,
+          classNames: ev.classNames,
           extendedProps: ev.extendedProps
         });
+        if (addedEvent) {
+          const type = addedEvent.extendedProps?.type || ev.extendedProps?.type || 'work';
+          const empNo = addedEvent.extendedProps?.empNo || ev.extendedProps?.empNo;
+          const color = ensureEmployeeColor(empNo);
+          const existingClasses = addedEvent?.getProp ? addedEvent.getProp('classNames') : addedEvent.classNames;
+          const classSet = new Set([...(Array.isArray(existingClasses) ? existingClasses : [])]);
+          classSet.add('fc-event-pill');
+          classSet.add(type === 'rest' ? 'fc-event-rest' : 'fc-event-work');
+          try {
+            addedEvent.setProp('classNames', Array.from(classSet));
+          } catch (e) {}
+          if (color && !addedEvent.extendedProps?.forceStyle) {
+            const gradient = getGradientFromBaseColor(color, type === 'rest' ? 'rest' : 'work');
+            const forceStyle = type === 'rest'
+              ? { background: gradient, backgroundImage: 'none', color, border: `2px solid ${color}` }
+              : { background: gradient, backgroundImage: 'none', color: '#fff', border: 'none' };
+            try {
+              addedEvent.setExtendedProp('forceStyle', forceStyle);
+              addedEvent.setProp('backgroundColor', '');
+              addedEvent.setProp('borderColor', type === 'rest' ? color : 'transparent');
+              addedEvent.setProp('textColor', type === 'rest' ? color : '#fff');
+            } catch (e) {}
+          }
+          decorateEventLater(addedEvent);
+        }
       });
       runConflictDetection();
       updateStats();
@@ -436,23 +491,37 @@ eventReceive: function(info) {
   // ✅ Apply gradient + pill class based on type
   if (type === "work") {
     const grad = getGradientFromBaseColor(color, "work");
-    newEvent.setProp("classNames", ["fc-event-pill", "fc-event-work"]);
+    const existingClassNames = newEvent?.getProp ? newEvent.getProp('classNames') : newEvent.classNames;
+    const classSet = new Set([...(Array.isArray(existingClassNames) ? existingClassNames : []), 'fc-event-pill', 'fc-event-work']);
+    newEvent.setProp('classNames', Array.from(classSet));
     newEvent.setExtendedProp("forceStyle", {
       background: grad,
       backgroundImage: "none",
       color: "#fff",
       border: "none"
     });
+    try {
+      newEvent.setProp('backgroundColor', '');
+      newEvent.setProp('borderColor', 'transparent');
+      newEvent.setProp('textColor', '#fff');
+    } catch (e) {}
 
   } else if (type === "rest") {
     const grad = getGradientFromBaseColor(color, "rest");
-    newEvent.setProp("classNames", ["fc-event-pill", "fc-event-rest"]);
+    const existingClassNames = newEvent?.getProp ? newEvent.getProp('classNames') : newEvent.classNames;
+    const classSet = new Set([...(Array.isArray(existingClassNames) ? existingClassNames : []), 'fc-event-pill', 'fc-event-rest']);
+    newEvent.setProp('classNames', Array.from(classSet));
     newEvent.setExtendedProp("forceStyle", {
       background: grad,
       backgroundImage: "none",
       color: color,
       border: `2px solid ${color}`
     });
+    try {
+      newEvent.setProp('backgroundColor', '');
+      newEvent.setProp('borderColor', color);
+      newEvent.setProp('textColor', color);
+    } catch (e) {}
   }
 
   // ✅ Ensure unique ID
@@ -485,6 +554,7 @@ eventReceive: function(info) {
   const scheduleDecorate = () => { try { decorateCalendarEvents(); } catch (e) {} };
   if (typeof requestAnimationFrame === 'function') requestAnimationFrame(scheduleDecorate);
   else setTimeout(scheduleDecorate, 0);
+  decorateEventLater(newEvent);
 
 },
 
@@ -535,21 +605,7 @@ eventReceive: function(info) {
         }
       } catch (e) {}
 
-      // Expose stable attributes on the DOM element for other code to query.
-      try {
-        // FullCalendar may already add data-event-id, but ensure it's present and also add a data-id that maps to our persisted id.
-        info.el.setAttribute('data-event-id', info.event.id);
-        info.el.setAttribute('data-id', info.event.extendedProps?.id || info.event.id);
-        // mark as a schedule-pill so selection/drag/context menu use a consistent selector
-        info.el.classList.add('schedule-pill');
-      } catch (e) {}
-
-      // Apply forceStyle if present (ensures drag/drop keeps gradient)
-      if (info.event.extendedProps.forceStyle) {
-        Object.entries(info.event.extendedProps.forceStyle).forEach(([k,v]) => {
-          info.el.style.setProperty(k, v, 'important');
-        });
-      }
+      decorateSingleEventElement(info.event, info.el);
 
       const { type, shiftCode, isConflict, empNo } = info.event.extendedProps;
       const emp = employees[empNo];
@@ -697,7 +753,11 @@ try {
       try {
         const parsed = JSON.parse(eventEl.getAttribute('data-event'));
         const t = parsed.extendedProps && parsed.extendedProps.type ? parsed.extendedProps.type : '';
-        parsed.classNames = t === 'rest' ? ['fc-event-rest'] : ['fc-event-work'];
+        const classSet = new Set(parsed.classNames || []);
+        classSet.add('fc-event-pill');
+        if (t === 'rest') classSet.add('fc-event-rest');
+        else classSet.add('fc-event-work');
+        parsed.classNames = Array.from(classSet);
         // Let CSS handle background color per type
         eventEl._fcEventData = parsed;
         return parsed;
@@ -852,26 +912,41 @@ if (calendar && typeof calendar.on === 'function') {
 
 // --- Generate Cards with Persistent Colors ---
 Object.values(employees).forEach(emp => {
+  const color = ensureEmployeeColor(emp.empNo);
+  const workGradient = getGradientFromBaseColor(color, 'work');
+  const restGradient = getGradientFromBaseColor(color, 'rest');
+
   const workEventData = {
     title: emp.name,
+    classNames: ['fc-event-pill', 'fc-event-work'],
     extendedProps: {
       type: 'work',
       empNo: emp.empNo,
-      position: emp.position
+      position: emp.position,
+      forceStyle: {
+        background: workGradient,
+        backgroundImage: 'none',
+        color: '#fff',
+        border: 'none'
+      }
     }
   };
 
   const restEventData = {
     title: emp.name,
+    classNames: ['fc-event-pill', 'fc-event-rest'],
     extendedProps: {
       type: 'rest',
       empNo: emp.empNo,
-      position: emp.position
+      position: emp.position,
+      forceStyle: {
+        background: restGradient,
+        backgroundImage: 'none',
+        color,
+        border: `2px solid ${color}`
+      }
     }
   };
-
-  // --- Assign or reuse color for employee ---
-  const color = ensureEmployeeColor(emp.empNo);
 
   // --- Draggable Card UI ---
 const cardHtml = `
@@ -886,13 +961,13 @@ const cardHtml = `
         <div
           class="fc-event-pill fc-event-work px-3 py-1 text-xs font-medium rounded-full cursor-pointer select-none shadow-sm"
           data-event='${JSON.stringify(workEventData)}'
-          style="background:${getGradientFromBaseColor(color, 'work')}; color:#fff; border:none;">
+          style="background:${workGradient}; color:#fff; border:none;">
           🟦 Work
         </div>
         <div
           class="fc-event-pill fc-event-rest px-3 py-1 text-xs font-medium rounded-full cursor-pointer select-none shadow-sm"
           data-event='${JSON.stringify(restEventData)}'
-          style="background:${getGradientFromBaseColor(color, 'rest')}; color:${color}; border:2px solid ${color};">
+          style="background:${restGradient}; color:${color}; border:2px solid ${color};">
           🔴 Rest
         </div>
       </div>
@@ -985,7 +1060,13 @@ if (shiftSearchInput && shiftPresetSelect) {
               const cleanCode = String(shiftCode).split(' ')[0];
               if (currentDroppingEvent) {
                 currentDroppingEvent.setExtendedProp('shiftCode', cleanCode);
-                currentDroppingEvent.setProp('classNames', ['fc-event-work']);
+                const dropType = currentDroppingEvent.extendedProps?.type || 'work';
+                const existingClassNames = currentDroppingEvent?.getProp ? currentDroppingEvent.getProp('classNames') : currentDroppingEvent.classNames;
+                const classSet = new Set([...(Array.isArray(existingClassNames) ? existingClassNames : []), 'fc-event-pill', `fc-event-${dropType}`]);
+                try {
+                  currentDroppingEvent.setProp('classNames', Array.from(classSet));
+                } catch (e) {}
+                decorateEventLater(currentDroppingEvent);
                 runConflictDetection();
                 updateStats();
                 saveToLocalStorage();
@@ -1462,48 +1543,153 @@ function getScheduleIdFromElement(el) {
   );
 }
 
+function findEventElementByEvent(event) {
+  if (!event) return null;
+  const candidates = [];
+  if (event.id != null) candidates.push(`[data-event-id="${event.id}"]`);
+  const extId = event.extendedProps?.id || event.id;
+  if (extId) candidates.push(`[data-id="${extId}"]`);
+  if (event.extendedProps?.empNo) candidates.push(`.fc-event[data-empno="${event.extendedProps.empNo}"]`);
+  for (const selector of candidates) {
+    const el = document.querySelector(selector);
+    if (el) return el;
+  }
+  return null;
+}
+
+function ensurePillStructure(event, el) {
+  if (!event || !el) return;
+  const mainFrame = el.querySelector('.fc-event-main-frame') || el.querySelector('.fc-event-main');
+  if (!mainFrame) return;
+
+  let pillContent = mainFrame.querySelector('.pill-content');
+  if (!pillContent) {
+    mainFrame.innerHTML = '';
+    pillContent = document.createElement('div');
+    pillContent.className = 'pill-content';
+    mainFrame.appendChild(pillContent);
+  }
+
+  let nameSpan = pillContent.querySelector('.pill-name');
+  if (!nameSpan) {
+    nameSpan = document.createElement('span');
+    nameSpan.className = 'pill-name';
+    pillContent.insertBefore(nameSpan, pillContent.firstChild);
+  }
+  nameSpan.textContent = event.title || '';
+
+  const shiftCode = event.extendedProps?.shiftCode;
+  let shiftSpan = pillContent.querySelector('.pill-shift');
+  if (shiftCode) {
+    if (!shiftSpan) {
+      shiftSpan = document.createElement('span');
+      shiftSpan.className = 'pill-shift';
+      pillContent.appendChild(shiftSpan);
+    }
+    shiftSpan.textContent = shiftCode;
+  } else if (shiftSpan) {
+    shiftSpan.remove();
+  }
+}
+
+function decorateSingleEventElement(event, el) {
+  if (!event || !el) return;
+  const extId = event.extendedProps?.id || event.id;
+
+  try {
+    if (event.id != null) {
+      el.setAttribute('data-event-id', event.id);
+      el.dataset.eventId = String(event.id);
+    }
+    if (extId) {
+      el.setAttribute('data-id', extId);
+      el.dataset.id = String(extId);
+    }
+    if (event.extendedProps?.empNo) {
+      el.setAttribute('data-empno', event.extendedProps.empNo);
+      el.dataset.empno = String(event.extendedProps.empNo);
+    }
+  } catch (e) {}
+
+  el.classList.add('schedule-pill', 'fc-event-pill');
+  el.classList.remove('fc-event-work', 'fc-event-rest');
+  if (event.extendedProps?.type === 'work') {
+    el.classList.add('fc-event-work');
+  } else if (event.extendedProps?.type === 'rest') {
+    el.classList.add('fc-event-rest');
+  }
+
+  if (event.extendedProps?.forceStyle) {
+    try {
+      Object.entries(event.extendedProps.forceStyle).forEach(([k, v]) => {
+        el.style.setProperty(k, v, 'important');
+      });
+    } catch (e) {}
+  } else {
+    try {
+      ['background', 'backgroundImage', 'color', 'border'].forEach(prop => {
+        el.style.removeProperty(prop);
+      });
+    } catch (e) {}
+  }
+
+  ensurePillStructure(event, el);
+
+  if (!el.__scheduleSelectionHandler) {
+    const handler = e => {
+      if (e.ctrlKey || e.metaKey) {
+        e.preventDefault();
+        e.stopPropagation();
+        toggleScheduleSelection(el, true);
+        return;
+      }
+      toggleScheduleSelection(el, false);
+    };
+    el.addEventListener('click', handler);
+    Object.defineProperty(el, '__scheduleSelectionHandler', {
+      value: handler,
+      enumerable: false,
+      configurable: true,
+      writable: false
+    });
+  }
+
+  el.onmouseenter = () => {
+    const id = getScheduleIdFromElement(el) || extId;
+    if (id != null) hoveredScheduleId = String(id);
+  };
+
+  el.onmouseleave = () => {
+    const id = getScheduleIdFromElement(el) || extId;
+    if (id != null && hoveredScheduleId === String(id)) {
+      hoveredScheduleId = null;
+    }
+  };
+}
+
+function decorateEventLater(event, attempt = 0) {
+  const scheduler = () => {
+    const el = findEventElementByEvent(event);
+    if (!el) {
+      if (attempt < 5) decorateEventLater(event, attempt + 1);
+      return;
+    }
+    decorateSingleEventElement(event, el);
+  };
+  if (typeof requestAnimationFrame === 'function') {
+    requestAnimationFrame(scheduler);
+  } else {
+    setTimeout(scheduler, 0);
+  }
+}
+
 function decorateCalendarEvents() {
   if (!calendar) return;
   const allEvents = calendar.getEvents();
   allEvents.forEach(ev => {
-    // prefer FC's data-event-id (guaranteed by the eventDidMount patch above)
-    const el = document.querySelector(`[data-event-id="${ev.id}"]`) || document.querySelector(`[data-id="${ev.extendedProps?.id || ev.id}"]`);
+    const el = findEventElementByEvent(ev);
     if (!el) return;
-    if (!el.classList.contains('schedule-pill')) el.classList.add('schedule-pill');
-    const computedId = getScheduleIdFromElement(el) || ev.extendedProps?.id || ev.id;
-    if (computedId) el.dataset.id = computedId;
-
-    // Attach click for multi-select Ctrl/Cmd
-    if (!el.__scheduleSelectionHandler) {
-      const handler = e => {
-        if (e.ctrlKey || e.metaKey) {
-          e.preventDefault();
-          e.stopPropagation();
-          toggleScheduleSelection(el, true);
-          return;
-        }
-        toggleScheduleSelection(el, false);
-      };
-      el.addEventListener('click', handler);
-      Object.defineProperty(el, '__scheduleSelectionHandler', {
-        value: handler,
-        enumerable: false,
-        configurable: true,
-        writable: false
-      });
-    }
-
-    el.onmouseenter = () => {
-      const id = getScheduleIdFromElement(el) || ev.extendedProps?.id || ev.id;
-      if (id) hoveredScheduleId = id;
-    };
-
-    el.onmouseleave = () => {
-      const id = getScheduleIdFromElement(el) || ev.extendedProps?.id || ev.id;
-      if (hoveredScheduleId === id) {
-        hoveredScheduleId = null;
-      }
-    };
+    decorateSingleEventElement(ev, el);
   });
 }
             
@@ -1641,20 +1827,37 @@ if (!window.__schedulerContextMenuInit) {
         );
         if (exists) { skipped++; return; }
         const newId = crypto?.randomUUID?.() ?? `sched-${Date.now()}-${Math.random().toString(36).slice(2,8)}`;
+        const pasteType = src.type || 'work';
+        const color = ensureEmployeeColor(src.empNo);
+        const gradient = getGradientFromBaseColor(color, pasteType === 'rest' ? 'rest' : 'work');
+        const forceStyle = pasteType === 'rest'
+          ? { background: gradient, backgroundImage: 'none', color, border: `2px solid ${color}` }
+          : { background: gradient, backgroundImage: 'none', color: '#fff', border: 'none' };
+        const classNames = ['fc-event-pill', pasteType === 'rest' ? 'fc-event-rest' : 'fc-event-work'];
         const newEvent = calendar.addEvent({
           id: newId,
           title: employees?.[src.empNo]?.name ?? src.empNo,
           start: newDateStr,
+          classNames,
           extendedProps: {
             id: newId,
             empNo: src.empNo,
             shiftCode: src.shiftCode,
-            type: src.type
+            type: pasteType,
+            forceStyle
           }
         });
         if (newEvent) {
+          try {
+            newEvent.setProp('classNames', classNames);
+            newEvent.setExtendedProp('forceStyle', forceStyle);
+            newEvent.setProp('backgroundColor', '');
+            newEvent.setProp('borderColor', pasteType === 'rest' ? color : 'transparent');
+            newEvent.setProp('textColor', pasteType === 'rest' ? color : '#fff');
+          } catch (e) {}
           const createdId = newEvent.extendedProps?.id || newEvent.id || newId;
           createdIdsForBatch.push(createdId);
+          decorateEventLater(newEvent);
         }
         added++;
       });
