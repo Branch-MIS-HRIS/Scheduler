@@ -1413,25 +1413,42 @@ if (shiftSearchInput && shiftPresetSelect) {
                 }
             });
 
-            // --- INITIAL STARTUP (ensure calendar and data are initialized) ---
-            try {
-              initializeCalendar();
-            } catch (err) {
-              console.error('initializeCalendar failed', err);
-            }
-            
-            try {
-              loadFromLocalStorage();
-            } catch (err) {
-              console.error('loadFromLocalStorage failed', err);
-            }
-            
-            // Ensure at least one editable employee row exists in the table
-            try {
-              if (!employeeTableBody || employeeTableBody.querySelectorAll('tr').length === 0) {
-                addEmployeeRow();
-              }
-            } catch (err) { /* silent */ }
+// --- INITIAL STARTUP / CALENDAR & DATA ---
+function startScheduler() {
+  // --- Initialize Calendar safely ---
+  try { initializeCalendar(); } catch (err) { console.error('initializeCalendar failed', err); }
+
+  // --- Load saved schedules ---
+  try { loadFromLocalStorage(); } catch (err) { console.error('loadFromLocalStorage failed', err); }
+
+  // --- Ensure at least one employee row exists ---
+  try {
+    if (!employeeTableBody || employeeTableBody.querySelectorAll('tr').length === 0) {
+      addEmployeeRow();
+    }
+  } catch (err) { /* silent */ }
+
+  // --- Decorate events after render ---
+  try {
+    decorateCalendarEvents();
+    calendar?.on('eventDidMount', decorateCalendarEvents);
+  } catch (err) { console.error('decorateCalendarEvents failed', err); }
+}
+
+// --- Event decoration for FullCalendar (plug-and-play) ---
+function decorateCalendarEvents() {
+  if (!calendar) return;
+  const allEvents = calendar.getEvents();
+  allEvents.forEach(ev => {
+    const el = document.querySelector(`[data-event-id="${ev.id}"]`);
+    if (!el) return;
+    if (!el.classList.contains('schedule-pill')) el.classList.add('schedule-pill');
+    if (!el.dataset.id) el.dataset.id = ev.extendedProps?.id || ev.id;
+  });
+}
+
+// --- Start everything ---
+startScheduler();
 
 // --- FULL SCHEDULER COPY/PASTE + DRAG SELECT (PLUG-AND-PLAY) ---
 if (!window.__schedulerContextMenuInit) {
@@ -1496,21 +1513,6 @@ if (!window.__schedulerContextMenuInit) {
   }
 
   function removeContextMenu() { q('#context-menu')?.remove(); }
-
-  // ---------- DECORATE FULLCALENDAR EVENTS (PLUG-AND-PLAY) ----------
-  function decorateCalendarEvents() {
-    if (!calendar) return;
-    const allEvents = calendar.getEvents();
-    allEvents.forEach(ev => {
-      const el = document.querySelector(`[data-event-id="${ev.id}"]`);
-      if (!el) return;
-      if (!el.classList.contains('schedule-pill')) el.classList.add('schedule-pill');
-      if (!el.dataset.id) el.dataset.id = ev.extendedProps?.id || ev.id;
-    });
-  }
-
-  // Call decoration after calendar render
-  calendar?.on('eventDidMount', decorateCalendarEvents);
 
   // ---------- COPY / PASTE ----------
   function copySelectedSchedules() {
@@ -1641,7 +1643,7 @@ if (!window.__schedulerContextMenuInit) {
     }
   });
 
-  // ---------- DRAG SELECTION (schedules or dates) ----------
+  // ---------- DRAG SELECTION ----------
   document.addEventListener('mousedown', e => {
     if (e.button !== 0) return;
     const pill = e.target.closest('.schedule-pill');
