@@ -142,6 +142,20 @@ aside h2 {
   transform: scale(1.03);
 }
 
+.schedule-pill.drag-preview,
+.fc-event-pill.drag-preview {
+  transform: translate(2px, 2px) scale(1.05);
+  box-shadow: 0 14px 32px rgba(15,23,42,0.26), 4px 4px 0 rgba(37,99,235,0.35);
+  opacity: 0.92;
+}
+
+body.multi-dragging .schedule-pill.drag-preview,
+body.multi-dragging .fc-event-pill.drag-preview {
+  cursor: grabbing;
+}
+
+body.multi-dragging { cursor: grabbing; }
+
 .pill-content {
   display: flex;
   align-items: center;
@@ -169,6 +183,15 @@ aside h2 {
   font-weight: 600;
   opacity: 0.9;
   white-space: nowrap;
+}
+
+.draggable-employee-name,
+.draggable-employee-position {
+  display: block;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
 }
 
 #draggable-cards-container .fc-event-pill {

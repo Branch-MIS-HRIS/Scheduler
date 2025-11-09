@@ -15,6 +15,16 @@ function shadeColor(color, percent) {
     (B<255? (B<1?0:B) :255)
   ).toString(16).slice(1);
 }
+
+function escapeHtml(str) {
+  if (str == null) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
             
             // --- STATE & CONFIG ---
             
@@ -382,13 +392,15 @@ function loadFromLocalStorage() {
         const workStyle = `background:${workGradient}; color:#fff; border:none;`;
         const restStyle = `background:${restGradient}; color:${color}; border:2px solid ${color};`;
 
+        const safeName = escapeHtml(emp.name);
+        const safePosition = escapeHtml(emp.position);
         const cardHtml = `
           <div class="p-3 rounded-lg shadow-sm border border-gray-200" data-empno="${emp.empNo}"
                style="border-left: 6px solid ${color}; background: linear-gradient(to right, ${color}22, ${color}08);">
-            <div class="flex items-center justify-between">
-              <div>
-                <div class="font-medium text-gray-800">${emp.name}</div>
-                <div class="text-xs text-gray-500">${emp.position}</div>
+            <div class="flex items-center justify-between gap-3">
+              <div class="min-w-0">
+                <div class="font-medium text-gray-800 draggable-employee-name" title="${safeName}">${safeName}</div>
+                <div class="text-xs text-gray-500 draggable-employee-position" title="${safePosition}">${safePosition}</div>
               </div>
               <div class="flex space-x-2">
                 <div class='fc-event-pill fc-event-work px-3 py-1 text-xs font-medium rounded-full' data-event='${JSON.stringify(workEventData)}' style="${workStyle}">🟦 Work</div>
@@ -949,31 +961,33 @@ Object.values(employees).forEach(emp => {
   };
 
   // --- Draggable Card UI ---
-const cardHtml = `
-  <div class="p-3 rounded-lg shadow-sm border border-gray-200" data-empno="${emp.empNo}"
-       style="border-left: 6px solid ${color}; background: linear-gradient(to right, ${color}22, ${color}08);">
-    <div class="flex items-center justify-between">
-      <div>
-        <div class="font-medium text-gray-800">${emp.name}</div>
-        <div class="text-xs text-gray-500">${emp.position}</div>
-      </div>
-      <div class="flex space-x-2">
-        <div
-          class="fc-event-pill fc-event-work px-3 py-1 text-xs font-medium rounded-full cursor-pointer select-none shadow-sm"
-          data-event='${JSON.stringify(workEventData)}'
-          style="background:${workGradient}; color:#fff; border:none;">
-          🟦 Work
+  const safeName = escapeHtml(emp.name);
+  const safePosition = escapeHtml(emp.position);
+  const cardHtml = `
+    <div class="p-3 rounded-lg shadow-sm border border-gray-200" data-empno="${emp.empNo}"
+         style="border-left: 6px solid ${color}; background: linear-gradient(to right, ${color}22, ${color}08);">
+      <div class="flex items-center justify-between gap-3">
+        <div class="min-w-0">
+          <div class="font-medium text-gray-800 draggable-employee-name" title="${safeName}">${safeName}</div>
+          <div class="text-xs text-gray-500 draggable-employee-position" title="${safePosition}">${safePosition}</div>
         </div>
-        <div
-          class="fc-event-pill fc-event-rest px-3 py-1 text-xs font-medium rounded-full cursor-pointer select-none shadow-sm"
-          data-event='${JSON.stringify(restEventData)}'
-          style="background:${restGradient}; color:${color}; border:2px solid ${color};">
-          🔴 Rest
+        <div class="flex space-x-2">
+          <div
+            class="fc-event-pill fc-event-work px-3 py-1 text-xs font-medium rounded-full cursor-pointer select-none shadow-sm"
+            data-event='${JSON.stringify(workEventData)}'
+            style="background:${workGradient}; color:#fff; border:none;">
+            🟦 Work
+          </div>
+          <div
+            class="fc-event-pill fc-event-rest px-3 py-1 text-xs font-medium rounded-full cursor-pointer select-none shadow-sm"
+            data-event='${JSON.stringify(restEventData)}'
+            style="background:${restGradient}; color:${color}; border:2px solid ${color};">
+            🔴 Rest
+          </div>
         </div>
       </div>
     </div>
-  </div>
-`;
+  `;
   if (draggableCardsContainer) draggableCardsContainer.innerHTML += cardHtml;
 });
                 
@@ -1577,6 +1591,7 @@ function ensurePillStructure(event, el) {
     pillContent.insertBefore(nameSpan, pillContent.firstChild);
   }
   nameSpan.textContent = event.title || '';
+  nameSpan.title = event.title || '';
 
   const shiftCode = event.extendedProps?.shiftCode;
   let shiftSpan = pillContent.querySelector('.pill-shift');
@@ -1711,6 +1726,50 @@ if (!window.__schedulerContextMenuInit) {
   // ---------- UTILITY ----------
   const qAll = (sel, root = document) => Array.from(root.querySelectorAll(sel));
   const q = (sel, root = document) => root.querySelector(sel);
+  const cssEscape = (typeof window !== 'undefined' && window.CSS?.escape)
+    ? window.CSS.escape
+    : str => String(str).replace(/"/g, '');
+
+  function getScheduleElementsById(id, root = document) {
+    const escaped = cssEscape(String(id));
+    return qAll(`.schedule-pill[data-id="${escaped}"], .fc-event-pill[data-id="${escaped}"]`, root);
+  }
+
+  function highlightSelectionByIds(ids, attempt = 0) {
+    const missing = [];
+    ids.forEach(id => {
+      const els = getScheduleElementsById(id);
+      if (!els.length) {
+        missing.push(id);
+        return;
+      }
+      els.forEach(el => el.classList.add('selected', 'ring-2', 'ring-blue-500', 'shadow-lg'));
+    });
+    if (missing.length && attempt < 5) {
+      const retry = () => highlightSelectionByIds(missing, attempt + 1);
+      if (typeof requestAnimationFrame === 'function') requestAnimationFrame(retry);
+      else setTimeout(retry, 16);
+    }
+  }
+
+  function applyDragPreviewToSelection(active) {
+    const method = active ? 'add' : 'remove';
+    selectedSchedules.forEach(id => {
+      getScheduleElementsById(id).forEach(el => el.classList[method]('drag-preview'));
+    });
+    if (!active) document.body.classList.remove('multi-dragging');
+  }
+
+  function queueSelectionReset(ids) {
+    const normalized = Array.from(new Set(ids.map(id => String(id))));
+    clearScheduleSelection();
+    normalized.forEach(id => selectedSchedules.add(id));
+    if (normalized.length) {
+      const highlight = () => highlightSelectionByIds(normalized);
+      if (typeof requestAnimationFrame === 'function') requestAnimationFrame(highlight);
+      else setTimeout(highlight, 16);
+    }
+  }
 
   const updateMouse = e => {
     lastMouseX = e.clientX;
@@ -1729,10 +1788,9 @@ if (!window.__schedulerContextMenuInit) {
   function showToastWrapper(msg, type = 'info') { showToast?.(msg, type); }
 
   function clearScheduleSelection() {
+    qAll('.schedule-pill.selected, .fc-event-pill.selected, .schedule-pill.drag-preview, .fc-event-pill.drag-preview')
+      .forEach(el => el.classList.remove('selected', 'ring-2', 'ring-blue-500', 'shadow-lg', 'drag-preview'));
     selectedSchedules.clear();
-    qAll('.schedule-pill.selected').forEach(el =>
-      el.classList.remove('selected', 'ring-2', 'ring-blue-500', 'shadow-lg')
-    );
   }
 
   function clearTargetDateSelection() {
@@ -1743,16 +1801,19 @@ if (!window.__schedulerContextMenuInit) {
 
   function toggleScheduleSelection(el, keepOthers = false) {
     if (!el) return;
-    const rawId = el.dataset.id;
+    const rawId = getScheduleIdFromElement(el) || el.dataset?.id;
     if (!rawId) return;
     const id = String(rawId);
+    const elements = getScheduleElementsById(id);
+    const needsRetry = !elements.length;
     if (!keepOthers) clearScheduleSelection();
     if (selectedSchedules.has(id)) {
       selectedSchedules.delete(id);
-      el.classList.remove('selected', 'ring-2', 'ring-blue-500', 'shadow-lg');
+      elements.forEach(node => node.classList.remove('selected', 'ring-2', 'ring-blue-500', 'shadow-lg', 'drag-preview'));
     } else {
       selectedSchedules.add(id);
-      el.classList.add('selected', 'ring-2', 'ring-blue-500', 'shadow-lg');
+      elements.forEach(node => node.classList.add('selected', 'ring-2', 'ring-blue-500', 'shadow-lg'));
+      if (needsRetry) highlightSelectionByIds([id]);
     }
   }
 
@@ -1862,6 +1923,8 @@ if (!window.__schedulerContextMenuInit) {
         added++;
       });
     });
+
+    queueSelectionReset(createdIdsForBatch);
 
     if (createdIdsForBatch.length) {
       pasteHistory.push(createdIdsForBatch);
@@ -1979,14 +2042,21 @@ if (!window.__schedulerContextMenuInit) {
   // ---------- DRAG SELECTION ----------
   document.addEventListener('mousedown', e => {
     if (e.button !== 0) return;
+    updateMouse(e);
     const pill = e.target.closest('.schedule-pill');
     const day = e.target.closest('.fc-daygrid-day, .fc-timegrid-slot');
 
     if (pill) {
       const pillId = getScheduleIdFromElement(pill) || pill.dataset.id;
       const normalizedId = pillId ? String(pillId) : null;
-      if (normalizedId && selectedSchedules.size > 1 && selectedSchedules.has(normalizedId)) {
+      const isModifier = e.ctrlKey || e.metaKey;
+      if (isModifier && normalizedId && !selectedSchedules.has(normalizedId)) {
+        toggleScheduleSelection(pill, true);
+      }
+      const canDragGroup = normalizedId && selectedSchedules.size > 1 && (selectedSchedules.has(normalizedId) || isModifier);
+      if (canDragGroup) {
         e.preventDefault();
+        e.stopPropagation();
         buildCopiedFromSelected({ silent: true });
         isDragging = true;
         window.__multiSelectDragActive = true;
@@ -2007,8 +2077,8 @@ if (!window.__schedulerContextMenuInit) {
 
   document.addEventListener('mousemove', e => {
     if (isDragging && dragGhost) {
-      dragGhost.style.left = `${e.pageX + 12}px`;
-      dragGhost.style.top = `${e.pageY + 12}px`;
+      dragGhost.style.left = `${e.clientX + 12}px`;
+      dragGhost.style.top = `${e.clientY + 12}px`;
     } else if (isSelectingDates && dateSelectStartEl) {
       const cur = document.elementFromPoint(e.clientX, e.clientY);
       const hoverDay = cur?.closest('.fc-daygrid-day, .fc-timegrid-slot');
@@ -2048,16 +2118,28 @@ if (!window.__schedulerContextMenuInit) {
   });
 
   function createDragGhost(count) {
-    removeDragGhost();
+    removeDragGhost({ keepPreview: true });
     dragGhost = document.createElement('div');
     dragGhost.className = 'drag-ghost fixed z-50 p-2 rounded border border-gray-300 bg-white shadow';
     dragGhost.style.pointerEvents = 'none';
-    dragGhost.style.left = `${lastMouseX+12}px`; dragGhost.style.top = `${lastMouseY+12}px`;
+    dragGhost.style.left = `${lastMouseX + 12}px`;
+    dragGhost.style.top = `${lastMouseY + 12}px`;
     dragGhost.style.minWidth = '120px';
     dragGhost.innerHTML = `<strong>${count}</strong> schedule${count>1?'s':''} — drag to date`;
     document.body.appendChild(dragGhost);
+    document.body.classList.add('multi-dragging');
+    applyDragPreviewToSelection(true);
   }
-  function removeDragGhost() { dragGhost?.remove(); dragGhost=null; }
+  function removeDragGhost(options = {}) {
+    const { keepPreview = false } = options;
+    if (dragGhost) {
+      dragGhost.remove();
+      dragGhost = null;
+    }
+    if (!keepPreview) {
+      applyDragPreviewToSelection(false);
+    }
+  }
 
   function buildCopiedFromSelected(options = {}) {
     if (!calendar) return;
