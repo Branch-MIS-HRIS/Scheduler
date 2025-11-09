@@ -1413,18 +1413,19 @@ if (shiftSearchInput && shiftPresetSelect) {
                 }
             });
 
-
 // --- CONTEXT MENU + COPY/PASTE LOGIC ---
 if (!window.__schedulerContextMenuInit) {
   window.__schedulerContextMenuInit = true;
 
   // Track mouse position for keyboard copy/paste detection
   let lastMouseX = 0, lastMouseY = 0;
+  let selectedDates = []; // for multi-date bulk paste
   document.addEventListener('mousemove', e => {
     lastMouseX = e.clientX;
     lastMouseY = e.clientY;
   });
 
+  // --- CONTEXT MENU ---
   document.addEventListener('contextmenu', e => {
     const el = document.elementFromPoint(e.clientX, e.clientY);
     if (!el) return;
@@ -1433,19 +1434,13 @@ if (!window.__schedulerContextMenuInit) {
     const calendarEl = el.closest('.fc-daygrid-day, .fc-timegrid-slot');
 
     if (empTarget) {
-      // Right-click on employee card → show Copy/Paste menu
       e.preventDefault();
       e.stopPropagation();
-      const empNo = empTarget.dataset.empno;
-      if (!empNo) return;
-      showContextMenu(e.pageX, e.pageY, empNo);
+      showContextMenu(e.pageX, e.pageY, empTarget.dataset.empno);
     } else if (calendarEl && copiedEmployeeData) {
-      // Right-click on calendar day → show Paste-to-date menu
       e.preventDefault();
       e.stopPropagation();
-      const dateStr = calendarEl.getAttribute('data-date');
-      if (!dateStr) return;
-      showCalendarPasteMenu(e.pageX, e.pageY, dateStr);
+      showCalendarPasteMenu(e.pageX, e.pageY, calendarEl.getAttribute('data-date'));
     }
   });
 
@@ -1463,14 +1458,8 @@ if (!window.__schedulerContextMenuInit) {
     `;
     document.body.appendChild(menu);
 
-    document.getElementById('copy-schedule').onclick = () => {
-      copyEmployeeSchedule(empNo);
-      menu.remove();
-    };
-    document.getElementById('paste-schedule').onclick = () => {
-      pasteEmployeeSchedule(empNo);
-      menu.remove();
-    };
+    document.getElementById('copy-schedule').onclick = () => { copyEmployeeSchedule(empNo); menu.remove(); };
+    document.getElementById('paste-schedule').onclick = () => { pasteEmployeeSchedule(empNo); menu.remove(); };
 
     const remover = () => {
       menu.remove();
@@ -1497,7 +1486,7 @@ if (!window.__schedulerContextMenuInit) {
     document.body.appendChild(menu);
 
     document.getElementById('paste-schedule-calendar').onclick = () => {
-      pasteCopiedScheduleToDate(dateStr);
+      pasteCopiedScheduleToDates([dateStr]);
       menu.remove();
     };
 
@@ -1511,17 +1500,15 @@ if (!window.__schedulerContextMenuInit) {
     document.addEventListener('keydown', keyHandler);
   }
 
-  // --- Copy employee schedule ---
+  // --- COPY EMPLOYEE SCHEDULE ---
   function copyEmployeeSchedule(empNo) {
     copiedEmployeeData = null; // clear previous copy
-
     const emp = employees[empNo];
-    if (!emp) {
-      showToast('Employee not found.', 'error');
-      return;
-    }
+    if (!emp) return showToast('Employee not found.', 'error');
 
-    const events = calendar?.getEvents().filter(e => e.extendedProps?.empNo === empNo) || [];
+    // Only copy original events (ignore previously pasted/copied events)
+    const events = calendar?.getEvents()
+      .filter(e => e.extendedProps?.empNo === empNo && !String(e.id).startsWith('copied-') && !String(e.id).startsWith('pasted-')) || [];
 
     copiedEmployeeData = {
       empNo: emp.empNo,
@@ -1536,16 +1523,14 @@ if (!window.__schedulerContextMenuInit) {
     showToast(`Copied schedule for ${emp.empNo} - ${emp.name} (${copiedEmployeeData.events.length} events)`, 'info');
   }
 
-  // --- Paste to another employee ---
+  // --- PASTE TO EMPLOYEE ---
   function pasteEmployeeSchedule(targetEmpNo) {
     if (!copiedEmployeeData) return showToast('Nothing copied yet.', 'error');
-
     const target = employees[targetEmpNo];
     if (!target) return showToast('Target employee not found.', 'error');
     if (!calendar) return showToast('Calendar not initialized.', 'error');
 
     let added = 0, skipped = 0;
-
     copiedEmployeeData.events.forEach(ev => {
       const exists = calendar.getEvents().some(e =>
         e.extendedProps?.empNo === targetEmpNo &&
@@ -1573,66 +1558,64 @@ if (!window.__schedulerContextMenuInit) {
     runConflictDetection();
     updateStats();
     saveToLocalStorage();
-
     showToast(`Pasted to ${targetEmpNo}: ${added} added, ${skipped} skipped`, added ? 'success' : 'warn');
   }
 
-  // --- Paste to a specific date ---
-  function pasteCopiedScheduleToDate(targetDateStr) {
+  // --- PASTE TO MULTIPLE DATES ---
+  function pasteCopiedScheduleToDates(datesArray) {
     if (!copiedEmployeeData || !calendar) return showToast('No copied schedule available.', 'error');
-
-    const targetDate = new Date(targetDateStr);
-    if (isNaN(targetDate)) return showToast('Invalid date target.', 'error');
 
     const empNo = copiedEmployeeData.empNo;
     const emp = employees[empNo];
     if (!emp) return showToast('Original employee data missing.', 'error');
 
-    let added = 0, skipped = 0;
+    let totalAdded = 0, totalSkipped = 0;
     const srcEvents = copiedEmployeeData.events;
     if (!srcEvents || srcEvents.length === 0) return showToast('No events to paste.', 'warn');
 
-    const firstSrcDate = new Date(srcEvents[0].start);
-    const offsetDays = Math.round((targetDate - firstSrcDate) / (1000 * 60 * 60 * 24));
+    datesArray.forEach(dateStr => {
+      const targetDate = new Date(dateStr);
+      const firstSrcDate = new Date(srcEvents[0].start);
+      const offsetDays = Math.round((targetDate - firstSrcDate) / (1000*60*60*24));
 
-    srcEvents.forEach(ev => {
-      const newDate = new Date(ev.start);
-      newDate.setDate(newDate.getDate() + offsetDays);
-      const newDateStr = newDate.toISOString().split('T')[0];
+      srcEvents.forEach(ev => {
+        const newDate = new Date(ev.start);
+        newDate.setDate(newDate.getDate() + offsetDays);
+        const newDateStr = newDate.toISOString().split('T')[0];
 
-      const exists = calendar.getEvents().some(e =>
-        e.extendedProps?.empNo === empNo &&
-        e.startStr === newDateStr &&
-        e.extendedProps?.type === ev.type
-      );
-      if (exists) { skipped++; return; }
+        const exists = calendar.getEvents().some(e =>
+          e.extendedProps?.empNo === empNo &&
+          e.startStr === newDateStr &&
+          e.extendedProps?.type === ev.type
+        );
+        if (exists) { totalSkipped++; return; }
 
-      const newExtended = {
-        type: ev.type,
-        empNo: empNo,
-        position: emp.position,
-        shiftCode: ev.shiftCode || undefined,
-        id: crypto?.randomUUID?.() ?? `pasted-${Date.now()}-${Math.random().toString(36).slice(2,8)}`
-      };
+        const newExtended = {
+          type: ev.type,
+          empNo: empNo,
+          position: emp.position,
+          shiftCode: ev.shiftCode || undefined,
+          id: crypto?.randomUUID?.() ?? `pasted-${Date.now()}-${Math.random().toString(36).slice(2,8)}`
+        };
 
-      calendar.addEvent({
-        title: emp.name,
-        start: newDateStr,
-        extendedProps: newExtended
+        calendar.addEvent({
+          title: emp.name,
+          start: newDateStr,
+          extendedProps: newExtended
+        });
+        totalAdded++;
       });
-      added++;
     });
 
     runConflictDetection();
     updateStats();
     saveToLocalStorage();
-
-    showToast(`Pasted ${added} events starting ${targetDateStr} (${skipped} skipped)`, added ? 'success' : 'warn');
+    showToast(`Pasted ${totalAdded} events (${totalSkipped} skipped)`, totalAdded ? 'success' : 'warn');
   }
 
-  // --- Keyboard shortcuts ---
+  // --- KEYBOARD SHORTCUTS ---
   document.addEventListener('keydown', e => {
-    const tag = (e.target && e.target.tagName) ? e.target.tagName.toLowerCase() : '';
+    const tag = e.target?.tagName?.toLowerCase();
     if (tag === 'input' || tag === 'textarea' || e.target?.isContentEditable) return;
     if (!(e.ctrlKey || e.metaKey)) return;
 
@@ -1650,20 +1633,24 @@ if (!window.__schedulerContextMenuInit) {
     const dateTarget = el.closest?.('.fc-daygrid-day, .fc-timegrid-slot');
 
     if (key === 'c' && empTarget) {
-      const empNo = empTarget.dataset.empno;
-      if (empNo) copyEmployeeSchedule(empNo);
+      copyEmployeeSchedule(empTarget.dataset.empno);
     } else if (key === 'v') {
-      // Paste to date cell if available
-      const dateStr = dateTarget?.getAttribute('data-date');
-      if (dateStr) {
-        pasteCopiedScheduleToDate(dateStr);
+      // Ctrl+V: bulk paste
+      if (selectedDates.length > 0) {
+        pasteCopiedScheduleToDates(selectedDates);
         return;
       }
 
-      // Paste to employee card if hovering
-      const empNo = empTarget?.dataset.empno;
-      if (empNo) {
-        pasteEmployeeSchedule(empNo);
+      // Paste to hovered date cell
+      const dateStr = dateTarget?.getAttribute('data-date');
+      if (dateStr) {
+        pasteCopiedScheduleToDates([dateStr]);
+        return;
+      }
+
+      // Paste to employee card
+      if (empTarget) {
+        pasteEmployeeSchedule(empTarget.dataset.empno);
         return;
       }
 
@@ -1671,7 +1658,7 @@ if (!window.__schedulerContextMenuInit) {
     }
   });
 
-  // --- Initialization calls ---
+  // --- Initialization ---
   initializeCalendar();
   initializeDraggable();
   addEmployeeRow();
