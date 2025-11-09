@@ -79,7 +79,6 @@ function getGradientFromBaseColor(hex, type = 'work') {
             let lastMouseX = 0, lastMouseY = 0;
             let isDragging = false, dragGhost = null;
             let isSelectingDates = false, dateSelectStartEl = null;
-            let multiSelectModifierActive = false;
             
             // Configs
             const positionOptions = ['Branch Head', 'Site Supervisor', 'OIC', 'Mac Expert', 'Cashier'];
@@ -1498,20 +1497,16 @@ function decorateCalendarEvents() {
     const computedId = getScheduleIdFromElement(el) || ev.extendedProps?.id || ev.id;
     if (computedId) el.dataset.id = computedId;
 
-    if (!el.dataset.multiSelectBound) {
-      const handleClick = e => {
-        const useMulti = multiSelectModifierActive || e.ctrlKey || e.metaKey;
-        if (useMulti) {
-          e.preventDefault();
-          e.stopPropagation();
-          toggleScheduleSelection(el, true);
-        } else {
-          toggleScheduleSelection(el, false);
-        }
-      };
-      el.addEventListener('click', handleClick);
-      el.dataset.multiSelectBound = '1';
-    }
+    // Attach click for multi-select Ctrl/Cmd
+    el.onclick = e => {
+      if (e.ctrlKey || e.metaKey) {
+        e.preventDefault();
+        e.stopPropagation();
+        toggleScheduleSelection(el, true);
+      } else {
+        toggleScheduleSelection(el, false);
+      }
+    };
 
     el.onmouseenter = () => {
       const id = getScheduleIdFromElement(el) || ev.extendedProps?.id || ev.id;
@@ -1541,13 +1536,6 @@ if (!window.__schedulerContextMenuInit) {
   isDragging = false; dragGhost = null;
   isSelectingDates = false; dateSelectStartEl = null;
   window.__multiSelectDragActive = false;
-
-  const updateModifierFlag = e => {
-    multiSelectModifierActive = !!(e && (e.ctrlKey || e.metaKey));
-  };
-  document.addEventListener('keydown', updateModifierFlag);
-  document.addEventListener('keyup', updateModifierFlag);
-  window.addEventListener('blur', () => { multiSelectModifierActive = false; });
 
   // ---------- UTILITY ----------
   const qAll = (sel, root = document) => Array.from(root.querySelectorAll(sel));
