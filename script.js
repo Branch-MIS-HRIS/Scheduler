@@ -1,4 +1,20 @@
 document.addEventListener('DOMContentLoaded', function () {
+
+  // ---------- small utility: shadeColor ----------
+// color: hex string like "#3b82f6", percent: negative to darken, positive to lighten
+function shadeColor(color, percent) {
+  const num = parseInt(color.replace("#",""),16);
+  const amt = Math.round(2.55 * percent);
+  const R = (num >> 16) + amt;
+  const G = ((num >> 8) & 0x00FF) + amt;
+  const B = (num & 0x0000FF) + amt;
+  return "#" + (
+    0x1000000 +
+    (R<255? (R<1?0:R) :255) * 0x10000 +
+    (G<255? (G<1?0:G) :255) * 0x100 +
+    (B<255? (B<1?0:B) :255)
+  ).toString(16).slice(1);
+}
             
             // --- STATE & CONFIG ---
             
@@ -367,70 +383,75 @@ function initializeCalendar() {
     },
 
     // ---------- Event handlers (preserved exactly as before) ----------
-    eventReceive: function(info) {
+eventReceive: function(info) {
 
-      const newEvent = info.event;
-      const { type, empNo } = newEvent.extendedProps;
-      const dateStr = newEvent.startStr;
+  // ✅ Always read employee number safely
+  const droppedEmpNo = info.event.extendedProps?.empNo || info.event.extendedProps?.employeeNo;
+  if (!droppedEmpNo) return;
 
-      // ✅ Get employee color immediately
-      const color = employeeColors[empNo];
+  const newEvent = info.event;
+  const { type } = newEvent.extendedProps;
+  const dateStr = newEvent.startStr;
 
-      if (type === "work") {
-        const grad = getGradientFromBaseColor(color, "work");
-        newEvent.setProp("classNames", ["fc-event-pill", "fc-event-work"]);
-        newEvent.setExtendedProp("forceStyle", {
-          background: grad,
-          backgroundImage: "none",
-          color: "#fff",
-          border: "none"
-        });
+  // ✅ Get employee assigned color
+  const color = employeeColors[droppedEmpNo];
 
-      } else if (type === "rest") {
-        const grad = getGradientFromBaseColor(color, "rest");
-        newEvent.setProp("classNames", ["fc-event-pill", "fc-event-rest"]);
-        newEvent.setExtendedProp("forceStyle", {
-          background: grad,
-          backgroundImage: "none",
-          color: color,
-          border: `2px solid ${color}`
-        });
-      }
+  // ✅ Apply gradient + pill class based on type
+  if (type === "work") {
+    const grad = getGradientFromBaseColor(color, "work");
+    newEvent.setProp("classNames", ["fc-event-pill", "fc-event-work"]);
+    newEvent.setExtendedProp("forceStyle", {
+      background: grad,
+      backgroundImage: "none",
+      color: "#fff",
+      border: "none"
+    });
 
-      // ✅ Ensure unique ID
-      try {
-        newEvent.setExtendedProp('id', (crypto && crypto.randomUUID) ? crypto.randomUUID() : Date.now().toString());
-      } catch (e) {
-        newEvent.setExtendedProp('id', Date.now().toString());
-      }
+  } else if (type === "rest") {
+    const grad = getGradientFromBaseColor(color, "rest");
+    newEvent.setProp("classNames", ["fc-event-pill", "fc-event-rest"]);
+    newEvent.setExtendedProp("forceStyle", {
+      background: grad,
+      backgroundImage: "none",
+      color: color,
+      border: `2px solid ${color}`
+    });
+  }
 
-      // ✅ Duplicate check
-      const allEvents = calendar.getEvents();
-      const isDuplicate = allEvents.find(e => 
-        e.extendedProps.id !== newEvent.extendedProps.id &&
-        e.startStr === dateStr &&
-        e.extendedProps.empNo === empNo &&
-        e.extendedProps.type === type
-      );
+  // ✅ Ensure unique ID
+  try {
+    newEvent.setExtendedProp('id', (crypto && crypto.randomUUID) ? crypto.randomUUID() : Date.now().toString());
+  } catch (e) {
+    newEvent.setExtendedProp('id', Date.now().toString());
+  }
 
-      if (isDuplicate) {
-        showToast(`Duplicate entry blocked: ${employees[empNo] ? employees[empNo].name : empNo} already has a '${type}' day on this date.`, 'error');
-        newEvent.remove();
-        return;
-      }
+  // ✅ Duplicate check
+  const allEvents = calendar.getEvents();
+  const isDuplicate = allEvents.find(e => 
+    e.extendedProps.id !== newEvent.extendedProps.id &&
+    e.startStr === dateStr &&
+    e.extendedProps.empNo === droppedEmpNo &&
+    e.extendedProps.type === type
+  );
 
-      // ✅ Work → Open Shift Modal
-      if (type === 'work') {
-        currentDroppingEvent = newEvent;
-        openShiftModal();
-      } else {
-        // ✅ Rest is auto-accepted
-        runConflictDetection();
-        updateStats();
-        saveToLocalStorage();
-      }
+  if (isDuplicate) {
+    showToast(`Duplicate entry blocked: ${employees[droppedEmpNo] ? employees[droppedEmpNo].name : droppedEmpNo} already has a '${type}' day on this date.`, 'error');
+    newEvent.remove();
+    return;
+  }
 
-    },
+  // ✅ Work requires selecting a shift
+  if (type === 'work') {
+    currentDroppingEvent = newEvent;
+    openShiftModal();
+  } else {
+    // ✅ Rest is auto-accepted
+    runConflictDetection();
+    updateStats();
+    saveToLocalStorage();
+  }
+
+},
 
     /**
      * Fired when an event is dragged and dropped *within* the calendar.
@@ -832,7 +853,8 @@ Object.values(employees).forEach(emp => {
 
   // --- Draggable Card UI ---
 const cardHtml = `
-  <div class="p-3 bg-white rounded-lg shadow-sm border border-gray-200" data-empno="${emp.empNo}">
+  <div class="p-3 rounded-lg shadow-sm border border-gray-200" data-empno="${emp.empNo}"
+       style="border-left: 6px solid ${color}; background: linear-gradient(to right, ${color}22, ${color}10);">
     <div class="flex items-center justify-between">
       <div>
         <div class="font-medium text-gray-800">${emp.name}</div>

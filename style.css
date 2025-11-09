@@ -83,12 +83,14 @@ aside {
 }
 
 /* Pills */
+/* smaller pills for dropped employees */
 .fc-event-pill {
   box-shadow: 0 6px 18px rgba(2,6,23,0.06);
   border-radius: 999px;
-  padding: 6px 12px;
+  padding: 3px 8px;     /* reduced */
   font-weight: 600;
   letter-spacing: -0.2px;
+  font-size: 11px;      /* ensure text scales down */
 }
 .fc-event-pill.fc-event-work {
   background: linear-gradient(90deg, #2563eb, #3b82f6);
@@ -102,8 +104,10 @@ aside {
 }
 
 /* FullCalendar event style refinements */
-.fc-event-main-frame { padding: 6px 8px; border-radius: 8px; }
-.fc-event-title { font-weight: 600; font-size: 13px; }
+/* tighter inner frame for the event */
+.fc-event-main-frame { padding: 3px 6px; border-radius: 8px; }
+/* make titles slightly smaller when dropped onto calendar */
+.fc-event-title { font-weight: 600; font-size: 11px; }
 .fc-event .text-xs { font-size: 11px; opacity: 0.9; }
 
 /* Conflict badge */
