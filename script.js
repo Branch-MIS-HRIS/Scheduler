@@ -2562,7 +2562,7 @@ if (!window.__schedulerContextMenuInit) {
     dragGhost.style.pointerEvents = 'none';
     dragGhost.style.left = `${lastMouseX}px`;
     dragGhost.style.top = `${lastMouseY}px`;
-    dragGhost.style.transform = 'translate(-50%, -50%)';
+    dragGhost.style.transform = 'translate(10px, 12px)';
     dragGhost.style.minWidth = '120px';
     dragGhost.innerHTML = `
       <svg class="drag-ghost-icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">

@@ -507,7 +507,6 @@ body.multi-dragging { cursor: grabbing; }
   justify-content: center;
   gap: 0.35rem;
   text-align: center;
-  transform: translate(-50%, -50%);
 }
 
 .drag-ghost-icon {
@@ -555,9 +554,14 @@ body.multi-dragging { cursor: grabbing; }
 .fc-mirror.fc-event-rest { background: linear-gradient(135deg, #ef4444, #fb7185) !important; }
 
 /* Hover interactions for calendar days */
-.fc-daygrid-day:hover {
-  background: linear-gradient(90deg, rgba(14,165,233,0.03), rgba(15,23,42,0.01));
-  transition: background 180ms ease;
+.fc-daygrid-day-frame {
+  border-radius: 12px;
+  transition: background 180ms ease, box-shadow 180ms ease;
+}
+
+.fc-daygrid-day:hover .fc-daygrid-day-frame {
+  background: linear-gradient(90deg, rgba(14,165,233,0.05), rgba(15,23,42,0.02));
+  box-shadow: inset 0 0 0 1px rgba(59, 130, 246, 0.12);
 }
 
 /* Misc */
