@@ -552,6 +552,18 @@ body.multi-dragging { cursor: grabbing; }
 }
 .fc-mirror.fc-event-work { background: linear-gradient(135deg, #2563eb, #3b82f6) !important; }
 .fc-mirror.fc-event-rest { background: linear-gradient(135deg, #ef4444, #fb7185) !important; }
+/* ----- Added: keep mirror compact and aligned with cursor ----- */
+.fc-mirror,
+.fc-mirror .fc-event-main-frame,
+.fc-mirror .pill-content {
+  width: auto !important;
+  min-width: 120px !important;
+  max-width: 420px !important;
+  box-sizing: border-box !important;
+  transform: none !important;
+  transform-origin: top left !important;
+}
+.fc-mirror { pointer-events: none !important; }
 
 /* Hover interactions for calendar days */
 .fc-daygrid-day-frame {
