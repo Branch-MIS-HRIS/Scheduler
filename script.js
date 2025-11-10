@@ -1214,49 +1214,118 @@ function getDateUnderPointer() {
     if (statsEmployees) statsEmployees.textContent = empCount;
   }
 
-  function exportToExcel() {
-    if (!calendar) return;
-    const conflicts = getConflicts();
-    const allEvents = calendar.getEvents();
-    const daysOfWeek = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
-    const wb = XLSX.utils.book_new();
+function exportToExcel() {
+  if (!calendar) return;
 
-    const workData = [['Name','Employee No','Position','Work Date','Shift Code','Day']];
-    allEvents.filter(e => e.extendedProps.type === 'work')
-      .sort((a,b) => a.start - b.start || a.title.localeCompare(b.title))
-      .forEach(e => {
-        const emp = employees[e.extendedProps.empNo] || { name: 'N/A', empNo: e.extendedProps.empNo, position: 'N/A' };
-        workData.push([emp.name, emp.empNo, emp.position, e.startStr, e.extendedProps.shiftCode || 'N/A', daysOfWeek[e.start.getDay()]]);
-      });
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(workData), 'Work Schedule');
+  const conflicts = typeof getConflicts === 'function' ? getConflicts() : [];
+  const allEvents = calendar.getEvents();
+  const daysOfWeek = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+  const wb = XLSX.utils.book_new();
 
-    const restData = [['Name','Employee No','Position','Rest Date','Day']];
-    allEvents.filter(e => e.extendedProps.type === 'rest')
-      .sort((a,b) => a.start - b.start || a.title.localeCompare(b.title))
-      .forEach(e => {
-        const emp = employees[e.extendedProps.empNo] || { name: 'N/A', empNo: e.extendedProps.empNo, position: 'N/A' };
-        restData.push([emp.name, emp.empNo, emp.position, e.startStr, daysOfWeek[e.start.getDay()]]);
-      });
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(restData), 'Rest Schedule');
+  // --- Group events by employee number ---
+  const byEmp = {};
+  allEvents.forEach(e => {
+    const empNo = e?.extendedProps?.empNo;
+    if (!empNo) return;
+    if (!byEmp[empNo]) byEmp[empNo] = { work: [], rest: [] };
+    const t = e?.extendedProps?.type;
+    if (t === 'work') byEmp[empNo].work.push(e);
+    else if (t === 'rest') byEmp[empNo].rest.push(e);
+  });
 
-    if (conflicts.length > 0) {
-      const conflictData = [['Employee Name','Employee No','Policy Violated','Dates Involved']];
-      const map = {};
-      conflicts.forEach(c => {
-        const key = `${c.empNo}-${c.rule}`;
-        if (!map[key]) map[key] = { empNo: c.empNo, rule: c.rule, dates: new Set() };
-        map[key].dates.add(c.date);
-      });
-      Object.values(map).forEach(entry => {
-        const emp = employees[entry.empNo] || { name: entry.empNo, empNo: entry.empNo };
-        conflictData.push([emp.name, emp.empNo, entry.rule, [...entry.dates].join(', ')]);
-      });
-      XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(conflictData), 'Conflict Summary');
+  const getEmp = (empNo) => (employees && employees[empNo])
+    ? employees[empNo]
+    : { name: 'N/A', empNo: empNo, position: 'N/A' };
+
+  const empOrder = Object.keys(byEmp).sort((a,b) => {
+    const ea = getEmp(a);
+    const eb = getEmp(b);
+    // Sort by employee name, then by employee number as a tie‑breaker
+    return (ea.name || '').localeCompare(eb.name || '') || String(a).localeCompare(String(b));
+  });
+
+  // --- Work sheet (grouped by employee, then by date) ---
+  const workData = [['Name','Employee No','Position','Work Date','Shift Code','Day']];
+  empOrder.forEach(empNo => {
+    const emp = getEmp(empNo);
+    byEmp[empNo].work.sort((a,b) => a.start - b.start);
+    byEmp[empNo].work.forEach(e => {
+      const shift = (e?.extendedProps?.shiftCode) || 'N/A';
+      const day = daysOfWeek[e.start.getDay()];
+      workData.push([emp.name, emp.empNo, emp.position || 'N/A', e.startStr, shift, day]);
+    });
+    if (byEmp[empNo].work.length) workData.push(['','','','','','']); // visual separator
+  });
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(workData), 'Work Schedule');
+
+  // --- Rest sheet (grouped by employee, then by date) ---
+  const restData = [['Name','Employee No','Position','Rest Day Date','Day']];
+  empOrder.forEach(empNo => {
+    const emp = getEmp(empNo);
+    byEmp[empNo].rest.sort((a,b) => a.start - b.start);
+    byEmp[empNo].rest.forEach(e => {
+      const day = daysOfWeek[e.start.getDay()];
+      restData.push([emp.name, emp.empNo, emp.position || 'N/A', e.startStr, day]);
+    });
+    if (byEmp[empNo].rest.length) restData.push(['','','','','']); // visual separator
+  });
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(restData), 'Rest Schedule');
+
+  // --- Consolidated (side-by-side like your screenshot) ---
+  const consolidatedHeader = [
+    'NAME','EMPLOYEE NO.','WORK DATE','SHIFT CODE','Day of Week','POSITION',
+    'NAME','EMPLOYEE NO.','REST DAY DATE','Day of Week','POSITION'
+  ];
+  const consolidated = [consolidatedHeader];
+
+  empOrder.forEach(empNo => {
+    const emp = getEmp(empNo);
+
+    const left = byEmp[empNo].work
+      .slice().sort((a,b) => a.start - b.start)
+      .map(e => [
+        emp.name, emp.empNo, e.startStr, (e?.extendedProps?.shiftCode) || 'N/A',
+        daysOfWeek[e.start.getDay()], emp.position || 'N/A'
+      ]);
+
+    const right = byEmp[empNo].rest
+      .slice().sort((a,b) => a.start - b.start)
+      .map(e => [
+        emp.name, emp.empNo, e.startStr,
+        daysOfWeek[e.start.getDay()], emp.position || 'N/A'
+      ]);
+
+    const maxLen = Math.max(left.length, right.length, 1);
+    for (let i = 0; i < maxLen; i++) {
+      const l = left[i]  || [emp.name, emp.empNo, '', '', '', emp.position || 'N/A'];
+      const r = right[i] || [emp.name, emp.empNo, '', '',        emp.position || 'N/A'];
+      consolidated.push([...l, ...r]);
     }
-    XLSX.writeFile(wb, 'Branch_Schedule_Report.xlsx');
-    if (exportModal) closeModal(exportModal);
-    showToast('Excel report downloaded successfully!', 'success');
+    consolidated.push(['','','','','','','','','','','']); // spacer row between employees
+  });
+
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(consolidated), 'Consolidated (by Emp)');
+
+  // --- Conflict Summary (unchanged) ---
+  if (conflicts && conflicts.length > 0) {
+    const conflictData = [['Employee Name','Employee No','Policy Violated','Dates Involved']];
+    const map = {};
+    conflicts.forEach(c => {
+      const key = `${c.empNo}-${c.rule}`;
+      if (!map[key]) map[key] = { empNo: c.empNo, rule: c.rule, dates: new Set() };
+      map[key].dates.add(c.date);
+    });
+    Object.values(map).forEach(entry => {
+      const emp = getEmp(entry.empNo);
+      conflictData.push([emp.name, emp.empNo, entry.rule, [...entry.dates].join(', ')]);
+    });
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(conflictData), 'Conflict Summary');
   }
+
+  XLSX.writeFile(wb, 'Branch_Schedule_Report.xlsx');
+  if (typeof closeModal === 'function' && typeof exportModal !== 'undefined' && exportModal) closeModal(exportModal);
+  if (typeof showToast === 'function') showToast('Excel report downloaded successfully!', 'success');
+}
 
   function resetAll() {
     if (!deleteModal || !deleteModalSummary || !confirmDeleteBtn) return;
