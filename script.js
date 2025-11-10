@@ -1243,7 +1243,7 @@ if (conflict) {
         for (let c = 0; c < row.length; c++) {
           const v = row[c];
           const s = (v === null || typeof v === 'undefined') ? '' : String(v);
-          const maxLineLen = s.split(/?/).reduce((m, seg) => Math.max(m, seg.length), 0);
+          const maxLineLen = s.split(/\r?\n/).reduce((m, seg) => Math.max(m, seg.length), 0);
           const px = (maxLineLen * 8) + padPx; // ~8px per character baseline
           widths[c] = Math.max(widths[c] || 0, px);
         }
