@@ -2448,8 +2448,8 @@ if (!window.__schedulerContextMenuInit) {
 
   document.addEventListener('mousemove', e => {
     if (isDragging && dragGhost) {
-      dragGhost.style.left = `${e.clientX + 12}px`;
-      dragGhost.style.top = `${e.clientY + 12}px`;
+      dragGhost.style.left = `${e.clientX}px`;
+      dragGhost.style.top = `${e.clientY}px`;
     } else if (isSelectingDates && dateSelectStartEl) {
       const cur = document.elementFromPoint(e.clientX, e.clientY);
       const hoverDay = cur?.closest('.fc-daygrid-day, .fc-timegrid-slot');
@@ -2560,10 +2560,17 @@ if (!window.__schedulerContextMenuInit) {
     dragGhost = document.createElement('div');
     dragGhost.className = 'drag-ghost fixed z-50 p-2 rounded border border-gray-300 bg-white shadow';
     dragGhost.style.pointerEvents = 'none';
-    dragGhost.style.left = `${lastMouseX + 12}px`;
-    dragGhost.style.top = `${lastMouseY + 12}px`;
+    dragGhost.style.left = `${lastMouseX}px`;
+    dragGhost.style.top = `${lastMouseY}px`;
+    dragGhost.style.transform = 'translate(-50%, -50%)';
     dragGhost.style.minWidth = '120px';
-    dragGhost.innerHTML = `<strong>${count}</strong> schedule${count>1?'s':''} — drag to date`;
+    dragGhost.innerHTML = `
+      <svg class="drag-ghost-icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+        <path d="M7 4a1 1 0 110-2 1 1 0 010 2zm6-2a1 1 0 100 2 1 1 0 000-2zM7 11a1 1 0 110-2 1 1 0 010 2zm6-2a1 1 0 100 2 1 1 0 000-2zM7 18a1 1 0 110-2 1 1 0 010 2zm6-2a1 1 0 100 2 1 1 0 000-2z"/>
+      </svg>
+      <strong>${count}</strong> schedule${count>1?'s':''}
+      <span class="drag-ghost-hint">Release to drop</span>
+    `.trim();
     document.body.appendChild(dragGhost);
     document.body.classList.add('multi-dragging');
     applyDragPreviewToSelection(true);
