@@ -100,6 +100,7 @@ aside h2 {
   width: 100%;
   box-sizing: border-box;
   margin: 2px 0;
+  overflow: hidden;
 }
 
 .fc-daygrid-event,
@@ -115,6 +116,14 @@ aside h2 {
   display: flex;
   align-items: center;
   justify-content: center;
+  min-width: 0;
+}
+
+.fc-event-main-frame {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-width: 0;
 }
 
 /* Work / Rest Pill Colors */
@@ -162,6 +171,7 @@ body.multi-dragging { cursor: grabbing; }
   width: 100%;
   gap: 8px;
   min-width: 0;
+  overflow: hidden;
 }
 
 .pill-name {
@@ -183,6 +193,8 @@ body.multi-dragging { cursor: grabbing; }
   font-weight: 600;
   opacity: 0.9;
   white-space: nowrap;
+  overflow: visible;
+  text-overflow: unset;
 }
 
 .draggable-employee-name,
