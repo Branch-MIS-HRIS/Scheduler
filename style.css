@@ -373,7 +373,8 @@ tbody tr:hover {
   flex: 1 1 auto;
   display: flex;
   align-items: center;
-  justify-content: center;
+  /* keep content left-aligned so .pill-name stays left and .pill-shift stays right */
+  justify-content: flex-start;
   min-width: 0;
 }
 

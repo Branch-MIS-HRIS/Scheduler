@@ -2465,7 +2465,8 @@ if (!window.__schedulerContextMenuInit) {
         }
         isDragging = true;
         window.__multiSelectDragActive = true;
-        createDragGhost(selectedSchedules.size);
+        // pass current mouse coords so the ghost appears exactly under the cursor
+        createDragGhost(selectedSchedules.size, e.clientX, e.clientY);
         document.body.classList.add('no-select');
         return;
       }
@@ -2584,13 +2585,15 @@ if (!window.__schedulerContextMenuInit) {
     return true;
   }
 
-  function createDragGhost(count) {
+  function createDragGhost(count, x = null, y = null) {
     removeDragGhost({ keepPreview: true });
     dragGhost = document.createElement('div');
     dragGhost.className = 'drag-ghost fixed z-50 p-2 rounded border border-gray-300 bg-white shadow';
     dragGhost.style.pointerEvents = 'none';
-    dragGhost.style.left = `${lastMouseX}px`;
-    dragGhost.style.top = `${lastMouseY}px`;
+    const left = (typeof x === 'number') ? x : lastMouseX;
+    const top  = (typeof y === 'number') ? y : lastMouseY;
+    dragGhost.style.left = `${left}px`;
+    dragGhost.style.top = `${top}px`;
     // center the ghost under the cursor instead of shifting by fixed pixels
     dragGhost.style.transform = 'translate(-50%,-50%)';
     dragGhost.style.minWidth = '120px';
@@ -2630,9 +2633,6 @@ if (!window.__schedulerContextMenuInit) {
       type: ev.extendedProps?.type ?? null,
       date: ev.startStr
     }));
-    if (copiedSchedules.length && !silent) {
-      showToastWrapper(`Copied ${copiedSchedules.length} schedule${copiedSchedules.length>1?'s':''}.`, 'info');
-    }
   }
   
   // Start the app after DOM is ready
