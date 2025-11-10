@@ -416,8 +416,8 @@ function getDateUnderPointer() {
                   <div class="text-xs text-gray-500 draggable-employee-position" title="${safePosition}">${safePosition}</div>
                 </div>
                 <div class="flex space-x-2">
-                  <div class='fc-event-pill fc-event-work px-3 py-1 text-xs font-medium rounded-full' data-event='${JSON.stringify(workEventData)}' style="${workStyle}">🟦 Work</div>
-                  <div class='fc-event-pill fc-event-rest px-3 py-1 text-xs font-medium rounded-full' data-event='${JSON.stringify(restEventData)}' style="${restStyle}">🔴 Rest</div>
+                  <div class='fc-event-pill fc-event-work px-3 py-1 text-xs font-medium rounded-full' data-event='${JSON.stringify(workEventData)}' style="${workStyle}">Work</div>
+                  <div class='fc-event-pill fc-event-rest px-3 py-1 text-xs font-medium rounded-full' data-event='${JSON.stringify(restEventData)}' style="${restStyle}">Rest</div>
                 </div>
               </div>
             </div>`;
