@@ -717,6 +717,16 @@ function initializeCalendar() {
 
     // ---------- Event handlers (preserved exactly as before) ----------
 eventReceive: function(info) {
+  // Ensure a single, clean drop (no stale multi-select on first interaction)
+try {
+  if (typeof selectedSchedules !== 'undefined' && selectedSchedules.clear) selectedSchedules.clear();
+  if (typeof selectedTargetDates !== 'undefined' && selectedTargetDates.clear) selectedTargetDates.clear();
+  if (typeof window !== 'undefined') {
+    window.__multiSelectDragActive = false;
+  }
+  document.body.classList.remove('multi-dragging');
+} catch (e) {}
+
 
   // ✅ Always read employee number safely
   const droppedEmpNo = info.event.extendedProps?.empNo || info.event.extendedProps?.employeeNo;
@@ -792,6 +802,14 @@ eventReceive: function(info) {
     openShiftModal();
   } else {
     // ✅ Rest is auto-accepted
+    // Guard: if any multi-select/batch flags remain, neutralize them for a single drop
+try {
+  if (typeof selectedSchedules !== 'undefined' && selectedSchedules.size > 0) {
+    selectedSchedules.clear();
+    document.body.classList.remove('multi-dragging');
+  }
+  if (typeof window !== 'undefined') window.__multiSelectDragActive = false;
+} catch (e) {}
     runConflictDetection();
     updateStats();
     saveToLocalStorage();
@@ -1340,6 +1358,9 @@ if (shiftSearchInput && shiftPresetSelect) {
               const cleanCode = String(shiftCode).split(' ')[0];
               if (currentDroppingEvent) {
                 currentDroppingEvent.setExtendedProp('shiftCode', cleanCode);
+                // Force a minimal prop change so FullCalendar repaints the DOM immediately
+const __t = currentDroppingEvent.title;
+try { currentDroppingEvent.setProp('title', __t); } catch (e) {}
                 const dropType = currentDroppingEvent.extendedProps?.type || 'work';
                 const existingClassNames = currentDroppingEvent?.getProp ? currentDroppingEvent.getProp('classNames') : currentDroppingEvent.classNames;
                 const classSet = new Set([...(Array.isArray(existingClassNames) ? existingClassNames : []), 'fc-event-pill', `fc-event-${dropType}`]);
@@ -2489,28 +2510,46 @@ if (!window.__schedulerContextMenuInit) {
     }
   });
 
-  document.addEventListener('mousemove', e => {
-    if (isDragging && dragGhost) {
+document.addEventListener('mousemove', e => {
+  if (isDragging && dragGhost) {
+    // --- DRAG GHOST FOLLOW LOGIC ---
+    const calendarRoot = document.getElementById('calendar');
+    if (calendarRoot) {
+      const rect = calendarRoot.getBoundingClientRect();
+      const x = e.clientX; // viewport coordinates
+      const y = e.clientY;
+      dragGhost.style.left = `${x}px`;
+      dragGhost.style.top = `${y}px`;
+      dragGhost.style.transform = 'translate(-50%, -50%)';
+    } else {
+      // Fallback in case calendarRoot is missing
       dragGhost.style.left = `${e.clientX}px`;
       dragGhost.style.top = `${e.clientY}px`;
-    } else if (isSelectingDates && dateSelectStartEl) {
-      const cur = document.elementFromPoint(e.clientX, e.clientY);
-      const hoverDay = cur?.closest('.fc-daygrid-day, .fc-timegrid-slot');
-      if (!hoverDay) return;
-      const start = new Date(dateSelectStartEl.getAttribute('data-date'));
-      const end = new Date(hoverDay.getAttribute('data-date'));
-      const s = start < end ? start : end;
-      const t = start < end ? end : start;
-      const datesRange = [];
-      for (let d = new Date(s); d <= t; d.setDate(d.getDate()+1))
-        datesRange.push(new Date(d).toISOString().split('T')[0]);
-      clearTargetDateSelection();
-      datesRange.forEach(ds => {
-        const cell = document.querySelector(`.fc-daygrid-day[data-date="${ds}"], .fc-timegrid-slot[data-date="${ds}"]`);
-        if (cell) { selectedTargetDates.add(ds); cell.classList.add('selected-date'); }
-      });
+      dragGhost.style.transform = 'translate(-50%, -50%)';
     }
-  });
+  } 
+  else if (isSelectingDates && dateSelectStartEl) {
+    // --- DATE RANGE SELECTION LOGIC ---
+    const currentEl = document.elementFromPoint(e.clientX, e.clientY);
+
+    if (currentEl && currentEl.closest('.fc-daygrid-day')) {
+      const currentDayEl = currentEl.closest('.fc-daygrid-day');
+      const allDays = Array.from(document.querySelectorAll('.fc-daygrid-day'));
+      const startIdx = allDays.indexOf(dateSelectStartEl);
+      const endIdx = allDays.indexOf(currentDayEl);
+
+      // Clear previous highlight
+      allDays.forEach(day => day.classList.remove('range-selecting'));
+
+      if (startIdx !== -1 && endIdx !== -1) {
+        const [minIdx, maxIdx] = [Math.min(startIdx, endIdx), Math.max(startIdx, endIdx)];
+        for (let i = minIdx; i <= maxIdx; i++) {
+          allDays[i].classList.add('range-selecting');
+        }
+      }
+    }
+  }
+});
 
   document.addEventListener('mouseup', e => {
     if (isDragging) {
