@@ -2213,10 +2213,10 @@ if (!window.__schedulerContextMenuInit) {
       const pillId = getScheduleIdFromElement(pill) || pill.dataset.id;
       const normalizedId = pillId ? String(pillId) : null;
       const isModifier = e.ctrlKey || e.metaKey;
-      if (isModifier && normalizedId && !selectedSchedules.has(normalizedId)) {
-        toggleScheduleSelection(pill, true);
+      if (isModifier) {
+        return;
       }
-      const canDragGroup = normalizedId && selectedSchedules.size > 1 && (selectedSchedules.has(normalizedId) || isModifier);
+      const canDragGroup = normalizedId && selectedSchedules.size > 1 && selectedSchedules.has(normalizedId);
       if (canDragGroup) {
         e.preventDefault();
         e.stopPropagation();
