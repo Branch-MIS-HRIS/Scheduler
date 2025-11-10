@@ -186,7 +186,7 @@ body.multi-dragging { cursor: grabbing; }
 }
 
 .pill-shift {
-  flex: 0 0 auto;
+  flex: 0 1 auto;
   margin-left: auto;
   text-align: right;
   font-size: 10px;
