@@ -626,15 +626,16 @@ calendar = new FullCalendar.Calendar(calendarEl, {
         } catch (e) {}
 
         // FIX: duplicate check only for work
-        if (type === 'work') {
-          const conflict = findExistingShiftForEmployee(empNo, dateStr, { exclude: [newEvent] });
-          if (conflict) {
-            const name = employees[empNo]?.name || empNo;
-            showToast(`Duplicate entry blocked: ${name} already has a shift on this date.`, 'error');
-            newEvent.remove();
-            return;
-          }
-        }
+        // Block any duplicate schedule (work ↔ rest cross-type aware)
+const conflict = findExistingShiftForEmployee(empNo, dateStr, { exclude: [newEvent] });
+if (conflict) {
+  const name = employees[empNo]?.name || empNo;
+  const existType = (conflict.extendedProps && conflict.extendedProps.type === 'rest') ? 'rest day' : 'work shift';
+  const newType = (type === 'rest') ? 'rest day' : 'work shift';
+  showToast(`Duplicate entry blocked: ${name} already has a ${existType} on this date. Cannot add another ${newType}.`, 'error');
+  newEvent.remove();
+  return;
+}
 
         // Branch logic
         if (type === 'work') {
@@ -664,10 +665,13 @@ calendar = new FullCalendar.Calendar(calendarEl, {
         if (movedEmpNo) {
           const conflict = findExistingShiftForEmployee(movedEmpNo, info.event.startStr, { exclude: [info.event] });
           if (conflict) {
-            const employeeName = employees[movedEmpNo] ? employees[movedEmpNo].name : movedEmpNo;
-            showToast(`Move blocked: ${employeeName} already has a shift on this date.`, 'error');
-            info.revert(); return;
-          }
+  const employeeName = employees[movedEmpNo]?.name || movedEmpNo;
+  const existType = (conflict.extendedProps && conflict.extendedProps.type === 'rest') ? 'rest day' : 'work shift';
+  const movingType = (info.event.extendedProps && info.event.extendedProps.type === 'rest') ? 'rest day' : 'work shift';
+  showToast(`Move blocked: ${employeeName} already has a ${existType} on this date. Cannot overlap with another ${movingType}.`, 'error');
+  info.revert();
+  return;
+}
         }
         runConflictDetection();
         updateStats();
