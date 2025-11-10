@@ -412,6 +412,74 @@ const shiftTimes = {
   "WHSE-012": "9:00AM - 1:00PM"
 };
 
+function formatShiftTime(raw) {
+  if (!raw) return '';
+  const trimmed = String(raw).trim();
+  if (!trimmed) return '';
+
+  const normalizeTimeToken = token => {
+    const t = token.trim();
+    const match = t.match(/^(\d{1,2}:\d{2})\s*([AaPp][Mm])$/);
+    if (!match) return t.replace(/\s+/g, ' ');
+    return `${match[1]} ${match[2].toUpperCase()}`;
+  };
+
+  const rangeMatch = trimmed.match(/^(.*?)\s*[-–]\s*(.*?)$/);
+  if (!rangeMatch) {
+    return normalizeTimeToken(trimmed);
+  }
+
+  const start = normalizeTimeToken(rangeMatch[1]);
+  const end = normalizeTimeToken(rangeMatch[2]);
+  return `${start} – ${end}`;
+}
+
+function buildEventTooltipContent(event) {
+  if (!event) return '';
+  const ext = event.extendedProps || {};
+  const empNo = ext.empNo;
+  const employee = empNo != null && employees ? employees[empNo] : null;
+  const typeLabel = ext.type === 'rest' ? 'Rest' : 'Work';
+  const shiftCode = ext.shiftCode;
+  const shiftTimeRaw = shiftCode && shiftTimes[shiftCode] ? shiftTimes[shiftCode] : '';
+  const formattedShiftTime = formatShiftTime(shiftTimeRaw);
+  const shiftCodeText = shiftCode ? escapeHtml(shiftCode) : 'N/A';
+  const shiftCodeWithTime = shiftCode
+    ? `${shiftCodeText}${formattedShiftTime ? `&nbsp;&nbsp;${escapeHtml(formattedShiftTime)}` : ''}`
+    : 'N/A';
+  const employeeNumber = employee && employee.empNo != null ? employee.empNo : (empNo ?? 'N/A');
+  const position = employee && employee.position ? employee.position : 'N/A';
+
+  return `
+            <div class='text-sm space-y-1'>
+              <div><strong>Employee #:</strong> ${escapeHtml(employeeNumber)}</div>
+              <div><strong>Position:</strong> ${escapeHtml(position)}</div>
+              <div><strong>Shift Code:</strong> ${shiftCodeWithTime}</div>
+              <div><strong>Shift:</strong> ${escapeHtml(typeLabel)}</div>
+            </div>
+          `;
+}
+
+function refreshEventTooltip(event, el) {
+  if (!event || typeof tippy === 'undefined') return;
+  const target = el || (typeof findEventElementByEvent === 'function' ? findEventElementByEvent(event) : null);
+  if (!target) return;
+
+  const content = buildEventTooltipContent(event);
+  try {
+    if (target._tippy) {
+      target._tippy.setContent(content);
+    } else {
+      tippy(target, {
+        content,
+        allowHTML: true,
+        theme: 'light-border',
+        placement: 'top',
+      });
+    }
+  } catch (e) {}
+}
+
 const shiftSelect = (typeof TomSelect !== 'undefined' && document.querySelector("#shift-preset")) ? new TomSelect("#shift-preset", {
   create: false,
   sortField: { field: "text", direction: "asc" },
@@ -421,12 +489,14 @@ const shiftSelect = (typeof TomSelect !== 'undefined' && document.querySelector(
     option: function (data, escape) {
       const code = data.value;
       const time = shiftTimes[code] || "";
-      return `<div>${escape(code)} ${time ? `(${escape(time)})` : ""}</div>`;
+      const formattedTime = formatShiftTime(time);
+      return `<div>${escape(code)} ${formattedTime ? `(${escape(formattedTime)})` : ""}</div>`;
     },
     item: function (data, escape) {
       const code = data.value;
       const time = shiftTimes[code] || "";
-      return `<div>${escape(code)} ${time ? `(${escape(time)})` : ""}</div>`;
+      const formattedTime = formatShiftTime(time);
+      return `<div>${escape(code)} ${formattedTime ? `(${escape(formattedTime)})` : ""}</div>`;
     }
   }
 }) : null;
@@ -822,20 +892,7 @@ eventReceive: function(info) {
         }
       }
 
-      try {
-        tippy(info.el, {
-          content: `
-            <div class='text-sm'>
-              <div><strong>Employee #:</strong> ${emp ? emp.empNo : empNo}</div>
-              <div><strong>Position:</strong> ${emp ? emp.position : 'N/A'}</div>
-              <div><strong>Shift:</strong> ${type === 'work' ? 'Work' : 'Rest'}</div>
-            </div>
-          `,
-          allowHTML: true,
-          theme: 'light-border',
-          placement: 'top',
-        });
-      } catch (e) {}
+      refreshEventTooltip(info.event, info.el);
 
       if (!emp) {
         console.error(`Event ${info.event.id || ''} has invalid employee data (empNo: ${empNo}). Hiding event.`);
@@ -1248,6 +1305,7 @@ if (shiftSearchInput && shiftPresetSelect) {
                   currentDroppingEvent.setProp('classNames', Array.from(classSet));
                 } catch (e) {}
                 decorateEventLater(currentDroppingEvent);
+                refreshEventTooltip(currentDroppingEvent);
                 runConflictDetection();
                 updateStats();
                 saveToLocalStorage();
@@ -1778,6 +1836,8 @@ function ensurePillStructure(event, el) {
   } else if (shiftSpan) {
     shiftSpan.remove();
   }
+
+  refreshEventTooltip(event, el);
 }
 
 function decorateSingleEventElement(event, el) {
