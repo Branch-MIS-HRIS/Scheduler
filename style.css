@@ -737,7 +737,7 @@ tbody tr td:first-child {
 
 .schedule-pill.drag-preview,
 .fc-event-pill.drag-preview {
-  transform: translate(2px, 2px) scale(1.05);
+  /* transform: translate(2px, 2px) scale(1.05); */ /* avoid initial hop */
   box-shadow: 0 14px 32px rgba(15,23,42,0.26), 4px 4px 0 rgba(37,99,235,0.35);
   opacity: 0.92;
 }
@@ -1022,9 +1022,10 @@ body.multi-dragging { cursor: grabbing; }
     animation: none !important;
   }
 }
-/* Hide FullCalendar's default drag mirror (we show our own ghost) */
-.fc-mirror { opacity: 0 !important; visibility: hidden !important; }
 
 /* While dragging, neutralize transforms that can skew hit-testing */
-.no-transform-during-drag *:not(.drag-ghost) { transform: none !important; }
+.no-transform-during-drag *:not(.drag-ghost) {
+  transform: none !important;
+  transition: none !important;  /* added */
+}
 

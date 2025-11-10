@@ -544,14 +544,22 @@ function getDateUnderPointer() {
   function initializeCalendar() {
     if (!calendarEl) return;
 
-    calendar = new FullCalendar.Calendar(calendarEl, {
-      initialView: 'dayGridMonth',
-      editable: true,
-      droppable: true,
-      selectable: true,
-      dayMaxEvents: true,
-      height: 'auto',
-      headerToolbar: { left: 'prev,next today', center: 'title', right: 'dayGridMonth,dayGridWeek,dayGridDay' },
+calendar = new FullCalendar.Calendar(calendarEl, {
+  initialView: 'dayGridMonth',
+  editable: true,
+  droppable: true,
+  dragScroll: false,
+  selectable: true,
+  dayMaxEvents: true,
+  height: 'auto',
+  headerToolbar: { left: 'prev,next today', center: 'title', right: 'dayGridMonth,dayGridWeek,dayGridDay' },
+
+  eventDragStart(info) {
+    document.body.classList.add('no-transform-during-drag');
+  },
+  eventDragStop(info) {
+    document.body.classList.remove('no-transform-during-drag');
+  },
 
       /* -------------------------
          FIXED: eventReceive
