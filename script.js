@@ -716,110 +716,92 @@ function initializeCalendar() {
     },
 
     // ---------- Event handlers (preserved exactly as before) ----------
-eventReceive: function(info) {
-  // Ensure a single, clean drop (no stale multi-select on first interaction)
-try {
-  if (typeof selectedSchedules !== 'undefined' && selectedSchedules.clear) selectedSchedules.clear();
-  if (typeof selectedTargetDates !== 'undefined' && selectedTargetDates.clear) selectedTargetDates.clear();
-  if (typeof window !== 'undefined') {
+eventReceive: function (info) {
+  // --- SAFETY RESET: Prevent first REST drop mutating Work pills ---
+  try {
+    // Reset stale selection states
+    if (typeof selectedSchedules !== 'undefined' && selectedSchedules.clear) selectedSchedules.clear();
+    if (typeof selectedTargetDates !== 'undefined' && selectedTargetDates.clear) selectedTargetDates.clear();
     window.__multiSelectDragActive = false;
+    document.body.classList.remove('multi-dragging');
+
+    // Deep-clone dataset so draggedEl doesn’t share object references
+    if (info && info.draggedEl && info.draggedEl.dataset) {
+      const cloned = typeof structuredClone === 'function'
+        ? structuredClone(info.draggedEl.dataset)
+        : JSON.parse(JSON.stringify(info.draggedEl.dataset));
+      delete cloned.empNo;
+      delete cloned.employeeNo;
+      if (cloned.extendedProps) {
+        delete cloned.extendedProps.empNo;
+        delete cloned.extendedProps.employeeNo;
+      }
+      cloned.id = `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+      info.draggedEl.dataset = cloned;
+    }
+  } catch (e) {
+    console.warn('Safety reset failed', e);
   }
-  document.body.classList.remove('multi-dragging');
-} catch (e) {}
-
-
-  // ✅ Always read employee number safely
-  const droppedEmpNo = info.event.extendedProps?.empNo || info.event.extendedProps?.employeeNo;
-  if (!droppedEmpNo) return;
 
   const newEvent = info.event;
-  const { type } = newEvent.extendedProps;
+  const type = newEvent.extendedProps?.type || 'work';
+  const droppedEmpNo =
+    info.draggedEl?.closest('[data-empno]')?.dataset?.empno ||
+    newEvent.extendedProps?.empNo ||
+    newEvent.extendedProps?.employeeNo ||
+    null;
+
+  // 🧠 If REST pill is dropped, do NOT carry over empNo (break shared reference)
+  if (type === 'rest') {
+    try {
+      newEvent.setExtendedProp('empNo', null);
+      newEvent.setExtendedProp('employeeNo', null);
+    } catch (e) {}
+  }
+
   const dateStr = newEvent.startStr;
+  const empNoToUse = type === 'rest' ? null : droppedEmpNo;
+  const color = empNoToUse ? ensureEmployeeColor(empNoToUse) : '#94a3b8';
+  const id = newEvent.extendedProps?.id || newEvent.id || crypto?.randomUUID?.() || `evt-${Date.now()}`;
 
-  // ✅ Get employee assigned color
-  const color = ensureEmployeeColor(droppedEmpNo);
-  const existingId = newEvent.extendedProps?.id || newEvent.id;
-  const assignedId = existingId || (() => {
-    try { return (crypto && crypto.randomUUID) ? crypto.randomUUID() : Date.now().toString(); }
-    catch (e) { return Date.now().toString(); }
-  })();
+  // Apply class & style
+  const grad = getGradientFromBaseColor(color, type);
+  const classNames = ['fc-event-pill', `fc-event-${type}`];
+  const forceStyle =
+    type === 'rest'
+      ? { background: grad, backgroundImage: 'none', color, border: `2px solid ${color}` }
+      : { background: grad, backgroundImage: 'none', color: '#fff', border: 'none' };
 
-  if (!existingId) {
-    try { newEvent.setExtendedProp('id', assignedId); } catch (e) {}
-    try { newEvent.setProp('id', assignedId); } catch (e) {}
+  try {
+    newEvent.setProp('classNames', classNames);
+    newEvent.setExtendedProp('forceStyle', forceStyle);
+    newEvent.setProp('backgroundColor', '');
+    newEvent.setProp('borderColor', type === 'rest' ? color : 'transparent');
+    newEvent.setProp('textColor', type === 'rest' ? color : '#fff');
+  } catch (e) {}
+
+  // Conflict check only for WORK type
+  if (type === 'work' && empNoToUse) {
+    const conflict = findExistingShiftForEmployee(empNoToUse, dateStr, { exclude: [newEvent] });
+    if (conflict) {
+      const employeeName = employees[empNoToUse]?.name || empNoToUse;
+      showToast(`Duplicate entry blocked: ${employeeName} already has a shift on this date.`, 'error');
+      newEvent.remove();
+      return;
+    }
   }
 
-  // ✅ Apply gradient + pill class based on type
-  if (type === "work") {
-    const grad = getGradientFromBaseColor(color, "work");
-    const existingClassNames = newEvent?.getProp ? newEvent.getProp('classNames') : newEvent.classNames;
-    const classSet = new Set([...(Array.isArray(existingClassNames) ? existingClassNames : []), 'fc-event-pill', 'fc-event-work']);
-    newEvent.setProp('classNames', Array.from(classSet));
-    newEvent.setExtendedProp("forceStyle", {
-      background: grad,
-      backgroundImage: "none",
-      color: "#fff",
-      border: "none"
-    });
-    try {
-      newEvent.setProp('backgroundColor', '');
-      newEvent.setProp('borderColor', 'transparent');
-      newEvent.setProp('textColor', '#fff');
-    } catch (e) {}
-
-  } else if (type === "rest") {
-    const grad = getGradientFromBaseColor(color, "rest");
-    const existingClassNames = newEvent?.getProp ? newEvent.getProp('classNames') : newEvent.classNames;
-    const classSet = new Set([...(Array.isArray(existingClassNames) ? existingClassNames : []), 'fc-event-pill', 'fc-event-rest']);
-    newEvent.setProp('classNames', Array.from(classSet));
-    newEvent.setExtendedProp("forceStyle", {
-      background: grad,
-      backgroundImage: "none",
-      color: color,
-      border: `2px solid ${color}`
-    });
-    try {
-      newEvent.setProp('backgroundColor', '');
-      newEvent.setProp('borderColor', color);
-      newEvent.setProp('textColor', color);
-    } catch (e) {}
-  }
-
-  // ✅ Ensure unique ID
-  // ✅ Duplicate check
-  const conflict = findExistingShiftForEmployee(droppedEmpNo, dateStr, { exclude: [newEvent] });
-
-  if (conflict) {
-    const employeeName = employees[droppedEmpNo] ? employees[droppedEmpNo].name : droppedEmpNo;
-    showToast(`Duplicate entry blocked: ${employeeName} already has a shift on this date.`, 'error');
-    newEvent.remove();
-    return;
-  }
-
-  // ✅ Work requires selecting a shift
+  // Behavior per type
   if (type === 'work') {
     currentDroppingEvent = newEvent;
     openShiftModal();
   } else {
-    // ✅ Rest is auto-accepted
-    // Guard: if any multi-select/batch flags remain, neutralize them for a single drop
-try {
-  if (typeof selectedSchedules !== 'undefined' && selectedSchedules.size > 0) {
-    selectedSchedules.clear();
-    document.body.classList.remove('multi-dragging');
-  }
-  if (typeof window !== 'undefined') window.__multiSelectDragActive = false;
-} catch (e) {}
     runConflictDetection();
     updateStats();
     saveToLocalStorage();
   }
 
-  const scheduleDecorate = () => { try { decorateCalendarEvents(); } catch (e) {} };
-  if (typeof requestAnimationFrame === 'function') requestAnimationFrame(scheduleDecorate);
-  else setTimeout(scheduleDecorate, 0);
   decorateEventLater(newEvent);
-
 },
 
     /**
@@ -2512,33 +2494,20 @@ if (!window.__schedulerContextMenuInit) {
 
 document.addEventListener('mousemove', e => {
   if (isDragging && dragGhost) {
-    // --- DRAG GHOST FOLLOW LOGIC ---
-    const calendarRoot = document.getElementById('calendar');
-    if (calendarRoot) {
-      const rect = calendarRoot.getBoundingClientRect();
-      const x = e.clientX; // viewport coordinates
-      const y = e.clientY;
-      dragGhost.style.left = `${x}px`;
-      dragGhost.style.top = `${y}px`;
-      dragGhost.style.transform = 'translate(-50%, -50%)';
-    } else {
-      // Fallback in case calendarRoot is missing
-      dragGhost.style.left = `${e.clientX}px`;
-      dragGhost.style.top = `${e.clientY}px`;
-      dragGhost.style.transform = 'translate(-50%, -50%)';
-    }
+    // Drag ghost follows viewport coords
+    dragGhost.style.left = `${e.clientX}px`;
+    dragGhost.style.top  = `${e.clientY}px`;
+    // translate(-50%, -50%) is applied in CSS
   } 
   else if (isSelectingDates && dateSelectStartEl) {
-    // --- DATE RANGE SELECTION LOGIC ---
+    // Range-highlight across day cells (kept explicit — no placeholders)
     const currentEl = document.elementFromPoint(e.clientX, e.clientY);
-
     if (currentEl && currentEl.closest('.fc-daygrid-day')) {
       const currentDayEl = currentEl.closest('.fc-daygrid-day');
       const allDays = Array.from(document.querySelectorAll('.fc-daygrid-day'));
       const startIdx = allDays.indexOf(dateSelectStartEl);
-      const endIdx = allDays.indexOf(currentDayEl);
+      const endIdx   = allDays.indexOf(currentDayEl);
 
-      // Clear previous highlight
       allDays.forEach(day => day.classList.remove('range-selecting'));
 
       if (startIdx !== -1 && endIdx !== -1) {
