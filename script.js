@@ -199,6 +199,7 @@ function getGradientFromBaseColor(hex, type = 'work') {
 
             // State for modals
             let currentDroppingEvent = null;
+            let currentEditingEvent = null;
             let currentDeletingEvent = null;
             // track the hovered schedule pill for reliable key-based copy/paste detection
             let hoveredScheduleId = null;
@@ -1105,10 +1106,17 @@ document.querySelectorAll('#draggable-cards-container > div').forEach(card => {
             
             // --- MODAL & UI LOGIC ---
 
-            function openShiftModal() {
+            function openShiftModal(targetEvent = null) {
                 if (!shiftModal) return;
-                if (shiftPresetSelect) shiftPresetSelect.value = '';
-                if (shiftCustomInput) shiftCustomInput.value = '';
+
+                if (targetEvent) {
+                    currentEditingEvent = targetEvent;
+                    currentDroppingEvent = null;
+                } else {
+                    currentEditingEvent = null;
+                }
+
+                const existingCode = targetEvent?.extendedProps?.shiftCode || '';
 
                 if (shiftPresetSelect && shiftPresetSelect.options.length <= 1) {
                     shiftPresets.forEach(code => {
@@ -1117,8 +1125,42 @@ document.querySelectorAll('#draggable-cards-container > div').forEach(card => {
                     });
                 }
 
-                if (window.lastUsedShiftCode && shiftSelect) {
-                    shiftSelect.setValue(window.lastUsedShiftCode);
+                if (shiftSelect) {
+                    try { shiftSelect.clear(true); } catch (e) {}
+                }
+                if (shiftPresetSelect) shiftPresetSelect.value = '';
+                if (shiftCustomInput) shiftCustomInput.value = '';
+
+                if (existingCode) {
+                    const codeExistsInPreset = shiftPresets.includes(existingCode);
+
+                    if (codeExistsInPreset) {
+                        if (shiftSelect) {
+                            try { shiftSelect.addOption({ value: existingCode, text: existingCode }); } catch (e) {}
+                            try { shiftSelect.setValue(existingCode, true); } catch (e) {}
+                        }
+                        if (shiftPresetSelect) {
+                            const hasOption = Array.from(shiftPresetSelect.options).some(opt => opt.value === existingCode);
+                            if (!hasOption) {
+                                const opt = new Option(existingCode, existingCode);
+                                shiftPresetSelect.add(opt);
+                            }
+                            shiftPresetSelect.value = existingCode;
+                        }
+                    } else if (shiftCustomInput) {
+                        shiftCustomInput.value = existingCode;
+                    }
+                } else if (window.lastUsedShiftCode) {
+                    if (shiftSelect) {
+                        try { shiftSelect.setValue(window.lastUsedShiftCode, true); } catch (e) {}
+                    } else if (shiftPresetSelect) {
+                        const hasOption = Array.from(shiftPresetSelect.options).some(opt => opt.value === window.lastUsedShiftCode);
+                        if (!hasOption) {
+                            const opt = new Option(window.lastUsedShiftCode, window.lastUsedShiftCode);
+                            shiftPresetSelect.add(opt);
+                        }
+                        shiftPresetSelect.value = window.lastUsedShiftCode;
+                    }
                 }
 
                 shiftModal.classList.remove('hidden');
@@ -1163,26 +1205,31 @@ if (shiftSearchInput && shiftPresetSelect) {
                 showToast('Please select a preset or enter a custom shift code.', 'warn');
                 return;
               }
-            
+
               window.lastUsedShiftCode = shiftCode;
-            
+
               const cleanCode = String(shiftCode).split(' ')[0];
-              if (currentDroppingEvent) {
-                currentDroppingEvent.setExtendedProp('shiftCode', cleanCode);
-                const dropType = currentDroppingEvent.extendedProps?.type || 'work';
-                const existingClassNames = currentDroppingEvent?.getProp ? currentDroppingEvent.getProp('classNames') : currentDroppingEvent.classNames;
+              const targetEvent = currentDroppingEvent || currentEditingEvent;
+              if (targetEvent) {
+                targetEvent.setExtendedProp('shiftCode', cleanCode);
+                const dropType = targetEvent.extendedProps?.type || 'work';
+                const existingClassNames = targetEvent?.getProp ? targetEvent.getProp('classNames') : targetEvent.classNames;
                 const classSet = new Set([...(Array.isArray(existingClassNames) ? existingClassNames : []), 'fc-event-pill', `fc-event-${dropType}`]);
                 try {
-                  currentDroppingEvent.setProp('classNames', Array.from(classSet));
+                  targetEvent.setProp('classNames', Array.from(classSet));
                 } catch (e) {}
-                decorateEventLater(currentDroppingEvent);
+                decorateEventLater(targetEvent);
                 runConflictDetection();
                 updateStats();
                 saveToLocalStorage();
+                if (currentEditingEvent) {
+                  showToast('Shift updated.', 'success');
+                }
               }
-            
+
               if (shiftModal) closeModal(shiftModal);
               currentDroppingEvent = null;
+              currentEditingEvent = null;
             }
 
             function openDeleteModal(event) {
@@ -1235,10 +1282,13 @@ if (shiftSearchInput && shiftPresetSelect) {
                 const modalEl = document.getElementById(modalId);
                 closeModal(modalEl);
 
-                if (modalId === 'shift-modal' && currentDroppingEvent) {
-                    currentDroppingEvent.remove();
-                    showToast('Schedule add canceled.', 'info');
+                if (modalId === 'shift-modal') {
+                    if (currentDroppingEvent && !currentEditingEvent) {
+                        currentDroppingEvent.remove();
+                        showToast('Schedule add canceled.', 'info');
+                    }
                     currentDroppingEvent = null;
+                    currentEditingEvent = null;
                 }
                 
                 if (modalId === 'delete-modal') {
@@ -1906,14 +1956,15 @@ if (!window.__schedulerContextMenuInit) {
     if (!rawId) return;
     const id = String(rawId);
     const elements = getScheduleElementsById(id);
+    const nodes = elements.length ? elements : (el ? [el] : []);
     const needsRetry = !elements.length;
     if (!keepOthers) clearScheduleSelection();
     if (selectedSchedules.has(id)) {
       selectedSchedules.delete(id);
-      elements.forEach(node => node.classList.remove('selected', 'ring-2', 'ring-blue-500', 'shadow-lg', 'drag-preview'));
+      nodes.forEach(node => node.classList.remove('selected', 'ring-2', 'ring-blue-500', 'shadow-lg', 'drag-preview'));
     } else {
       selectedSchedules.add(id);
-      elements.forEach(node => node.classList.add('selected', 'ring-2', 'ring-blue-500', 'shadow-lg'));
+      nodes.forEach(node => node.classList.add('selected', 'ring-2', 'ring-blue-500', 'shadow-lg'));
       if (needsRetry) highlightSelectionByIds([id]);
     }
   }
@@ -2025,7 +2076,7 @@ if (!window.__schedulerContextMenuInit) {
       });
     });
 
-    queueSelectionReset(createdIdsForBatch);
+    clearScheduleSelection();
 
     if (createdIdsForBatch.length) {
       pasteHistory.push(createdIdsForBatch);
@@ -2070,6 +2121,8 @@ if (!window.__schedulerContextMenuInit) {
   document.addEventListener('contextmenu', e => {
     const pill = e.target.closest('.schedule-pill');
     const dateEl = e.target.closest('.fc-daygrid-day, .fc-timegrid-slot');
+    const scheduleId = pill ? getScheduleIdFromElement(pill) : null;
+    const contextEvent = scheduleId ? findCalendarEventByScheduleId(scheduleId) : null;
     if (pill && !pill.classList.contains('selected')) toggleScheduleSelection(pill);
 
     e.preventDefault();
@@ -2080,6 +2133,14 @@ if (!window.__schedulerContextMenuInit) {
     menu.id = 'context-menu';
     menu.className = 'absolute bg-white border border-gray-300 rounded shadow-lg z-50';
     menu.style.left = `${x}px`; menu.style.top = `${y}px`; menu.style.minWidth = '180px';
+
+    if (contextEvent && contextEvent.extendedProps?.type === 'work') {
+      const editBtn = document.createElement('button');
+      editBtn.className = 'block w-full text-left px-4 py-2 hover:bg-gray-100';
+      editBtn.innerText = '✏️ Edit Shift';
+      editBtn.onclick = () => { openShiftModal(contextEvent); removeContextMenu(); };
+      menu.appendChild(editBtn);
+    }
 
     if (selectedSchedules.size) {
       const btn = document.createElement('button');

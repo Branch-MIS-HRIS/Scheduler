@@ -193,8 +193,8 @@ body.multi-dragging { cursor: grabbing; }
   font-weight: 600;
   opacity: 0.9;
   white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  overflow: visible;
+  text-overflow: unset;
 }
 
 .draggable-employee-name,
