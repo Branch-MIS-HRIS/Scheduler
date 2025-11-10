@@ -2320,15 +2320,18 @@ if (!window.__schedulerContextMenuInit) {
       e.preventDefault();
       const el = document.elementFromPoint(lastMouseX, lastMouseY);
       const dateEl = el?.closest('.fc-daygrid-day, .fc-timegrid-slot');
-      if (selectedTargetDates.size > 1) {
+      const dateStr = dateEl?.getAttribute('data-date') || null;
+      const hasTargetSelection = selectedTargetDates.size > 0;
+
+      if (dateStr && (!hasTargetSelection || !selectedTargetDates.has(dateStr))) {
+        pasteSchedulesToDates([dateStr]);
+      } else if (selectedTargetDates.size > 1) {
         pasteSchedulesToDates(Array.from(selectedTargetDates));
       } else if (selectedTargetDates.size === 1) {
         const [single] = Array.from(selectedTargetDates);
         pasteSchedulesToDates([single]);
-      } else if (dateEl) {
-        const dateStr = dateEl.getAttribute('data-date');
-        if (dateStr) pasteSchedulesToDates([dateStr]);
-        else showToastWrapper('Hover over a date or select target dates to paste.', 'warn');
+      } else if (dateStr) {
+        pasteSchedulesToDates([dateStr]);
       } else {
         showToastWrapper('Hover over a date or select target dates to paste.', 'warn');
       }
