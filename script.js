@@ -216,6 +216,9 @@ function getGradientFromBaseColor(hex, type = 'work') {
             let pasteHistory = [];
             let copiedSchedules = [];
             let selectedSchedules = new Set();
+            let elementSelectionCounter = 0;
+            const selectedElementRegistry = new Map();
+            const scheduleSelectionTargets = new Map();
             let selectedTargetDates = new Set();
             let lastMouseX = 0, lastMouseY = 0;
             let isDragging = false, dragGhost = null;
@@ -1900,6 +1903,70 @@ if (!window.__schedulerContextMenuInit) {
     ? window.CSS.escape
     : str => String(str).replace(/"/g, '');
 
+  function ensureSelectionKey(el) {
+    if (!el) return null;
+    try {
+      if (!el.dataset) return null;
+      let key = el.dataset.selectionKey;
+      if (!key) {
+        elementSelectionCounter += 1;
+        key = `sel-${elementSelectionCounter}`;
+        el.dataset.selectionKey = key;
+      }
+      return key;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function applySelectionStyles(el, active) {
+    if (!el || !el.classList) return;
+    const method = active ? 'add' : 'remove';
+    el.classList[method]('selected', 'ring-2', 'ring-blue-500', 'shadow-lg');
+    if (!active) {
+      el.classList.remove('drag-preview');
+    }
+  }
+
+  function unregisterSelectionByKey(selectionKey, { removeId = true } = {}) {
+    if (!selectionKey) return;
+    const entry = selectedElementRegistry.get(selectionKey);
+    if (!entry) return;
+    const { id, el } = entry;
+    applySelectionStyles(el, false);
+    if (el?.classList) {
+      el.classList.remove('drag-preview');
+    }
+    selectedElementRegistry.delete(selectionKey);
+    if (id != null) {
+      const normalizedId = String(id);
+      if (scheduleSelectionTargets.get(normalizedId) === selectionKey) {
+        scheduleSelectionTargets.delete(normalizedId);
+        if (removeId) selectedSchedules.delete(normalizedId);
+      }
+    }
+  }
+
+  function registerSelectionElement(el, id) {
+    if (!el) return null;
+    const normalizedId = id != null ? String(id) : null;
+    const selectionKey = ensureSelectionKey(el);
+    if (!selectionKey) return null;
+
+    if (normalizedId) {
+      const existingKey = scheduleSelectionTargets.get(normalizedId);
+      if (existingKey && existingKey !== selectionKey) {
+        unregisterSelectionByKey(existingKey);
+      }
+      scheduleSelectionTargets.set(normalizedId, selectionKey);
+      selectedSchedules.add(normalizedId);
+    }
+
+    selectedElementRegistry.set(selectionKey, { id: normalizedId, el });
+    applySelectionStyles(el, true);
+    return selectionKey;
+  }
+
   function getScheduleElementsById(id, root = document) {
     const escaped = cssEscape(String(id));
     return qAll(`.schedule-pill[data-id="${escaped}"], .fc-event-pill[data-id="${escaped}"]`, root);
@@ -1914,12 +1981,19 @@ if (!window.__schedulerContextMenuInit) {
   function highlightSelectionByIds(ids, attempt = 0) {
     const missing = [];
     ids.forEach(id => {
-      const els = getScheduleElementsById(id);
-      if (!els.length) {
-        missing.push(id);
+      const normalizedId = String(id);
+      const existingKey = scheduleSelectionTargets.get(normalizedId);
+      const existingEntry = existingKey ? selectedElementRegistry.get(existingKey) : null;
+      if (existingEntry?.el && document.contains(existingEntry.el)) {
+        applySelectionStyles(existingEntry.el, true);
         return;
       }
-      els.forEach(el => el.classList.add('selected', 'ring-2', 'ring-blue-500', 'shadow-lg'));
+      const els = getScheduleElementsById(normalizedId);
+      if (!els.length) {
+        missing.push(normalizedId);
+        return;
+      }
+      registerSelectionElement(els[0], normalizedId);
     });
     if (missing.length && attempt < 5) {
       const retry = () => highlightSelectionByIds(missing, attempt + 1);
@@ -1930,8 +2004,10 @@ if (!window.__schedulerContextMenuInit) {
 
   function applyDragPreviewToSelection(active) {
     const method = active ? 'add' : 'remove';
-    selectedSchedules.forEach(id => {
-      getScheduleElementsById(id).forEach(el => el.classList[method]('drag-preview'));
+    selectedElementRegistry.forEach(({ el }) => {
+      if (!el || !el.classList) return;
+      if (!document.contains(el)) return;
+      el.classList[method]('drag-preview');
     });
     if (!active) document.body.classList.remove('multi-dragging');
   }
@@ -1964,8 +2040,11 @@ if (!window.__schedulerContextMenuInit) {
   function showToastWrapper(msg, type = 'info') { showToast?.(msg, type); }
 
   function clearScheduleSelection() {
+    Array.from(selectedElementRegistry.keys()).forEach(key => unregisterSelectionByKey(key));
     qAll('.schedule-pill.selected, .fc-event-pill.selected, .schedule-pill.drag-preview, .fc-event-pill.drag-preview')
       .forEach(el => el.classList.remove('selected', 'ring-2', 'ring-blue-500', 'shadow-lg', 'drag-preview'));
+    selectedElementRegistry.clear();
+    scheduleSelectionTargets.clear();
     selectedSchedules.clear();
   }
 
@@ -1977,20 +2056,29 @@ if (!window.__schedulerContextMenuInit) {
 
   function toggleScheduleSelection(el, keepOthers = false) {
     if (!el) return;
-    const rawId = getScheduleIdFromElement(el) || el.dataset?.id;
-    if (!rawId) return;
-    const id = String(rawId);
-    const elements = getScheduleElementsById(id);
-    const needsRetry = !elements.length;
-    const targetElements = elements.length ? elements : (el ? [el] : []);
-    if (!keepOthers) clearScheduleSelection();
-    if (selectedSchedules.has(id)) {
-      selectedSchedules.delete(id);
-      targetElements.forEach(node => node.classList.remove('selected', 'ring-2', 'ring-blue-500', 'shadow-lg', 'drag-preview'));
-    } else {
-      selectedSchedules.add(id);
-      targetElements.forEach(node => node.classList.add('selected', 'ring-2', 'ring-blue-500', 'shadow-lg'));
-      if (needsRetry) highlightSelectionByIds([id]);
+    const rawId = getScheduleIdFromElement(el) || el.dataset?.id || null;
+    const normalizedId = rawId != null ? String(rawId) : null;
+    const selectionKey = ensureSelectionKey(el);
+    if (!selectionKey) return;
+
+    const wasSelected = selectedElementRegistry.has(selectionKey);
+
+    if (!keepOthers) {
+      if (wasSelected) {
+        clearScheduleSelection();
+        return;
+      }
+      clearScheduleSelection();
+    }
+
+    if (keepOthers && wasSelected) {
+      unregisterSelectionByKey(selectionKey);
+      return;
+    }
+
+    registerSelectionElement(el, normalizedId);
+    if (!document.contains(el) && normalizedId != null) {
+      highlightSelectionByIds([normalizedId]);
     }
   }
 
@@ -2146,9 +2234,14 @@ if (!window.__schedulerContextMenuInit) {
   document.addEventListener('contextmenu', e => {
     const pill = e.target.closest('.schedule-pill');
     const dateEl = e.target.closest('.fc-daygrid-day, .fc-timegrid-slot');
-    if (pill && !pill.classList.contains('selected')) {
-      const keepOthers = hasMultiSelectModifier(e);
-      toggleScheduleSelection(pill, keepOthers);
+    const keepOthers = hasMultiSelectModifier(e);
+
+    if (pill) {
+      if (keepOthers) {
+        toggleScheduleSelection(pill, true);
+      } else if (!pill.classList.contains('selected')) {
+        toggleScheduleSelection(pill, false);
+      }
     }
 
     e.preventDefault();
