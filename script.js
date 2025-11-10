@@ -717,54 +717,37 @@ function initializeCalendar() {
 
     // ---------- Event handlers (preserved exactly as before) ----------
 eventReceive: function (info) {
-  // --- SAFETY RESET: Prevent first REST drop mutating Work pills ---
+  // --- SAFETY RESET: Clear any previous multi-drag or selection state ---
   try {
-    // Reset stale selection states
     if (typeof selectedSchedules !== 'undefined' && selectedSchedules.clear) selectedSchedules.clear();
     if (typeof selectedTargetDates !== 'undefined' && selectedTargetDates.clear) selectedTargetDates.clear();
     window.__multiSelectDragActive = false;
     document.body.classList.remove('multi-dragging');
+  } catch (e) {}
 
-    // Deep-clone dataset so draggedEl doesn’t share object references
-    if (info && info.draggedEl && info.draggedEl.dataset) {
-      const cloned = typeof structuredClone === 'function'
-        ? structuredClone(info.draggedEl.dataset)
-        : JSON.parse(JSON.stringify(info.draggedEl.dataset));
-      delete cloned.empNo;
-      delete cloned.employeeNo;
-      if (cloned.extendedProps) {
-        delete cloned.extendedProps.empNo;
-        delete cloned.extendedProps.employeeNo;
-      }
-      cloned.id = `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
-      info.draggedEl.dataset = cloned;
-    }
+  // --- Isolate data for this drop (deep clone so no shared references) ---
+  let newEvent = info.event;
+  try {
+    const cloned = JSON.parse(JSON.stringify(newEvent.extendedProps || {}));
+    cloned.id = `evt_${Date.now()}_${Math.random().toString(36).slice(2,6)}`;
+    newEvent.setExtendedProp('id', cloned.id);
+    newEvent.setExtendedProp('empNo', String(cloned.empNo || newEvent.extendedProps?.empNo || ''));
+    newEvent.setExtendedProp('employeeNo', String(cloned.employeeNo || newEvent.extendedProps?.employeeNo || ''));
+    newEvent.setExtendedProp('type', cloned.type || newEvent.extendedProps?.type || 'work');
   } catch (e) {
-    console.warn('Safety reset failed', e);
+    console.warn('Failed to clone event props:', e);
   }
 
-  const newEvent = info.event;
   const type = newEvent.extendedProps?.type || 'work';
-  const droppedEmpNo =
-    info.draggedEl?.closest('[data-empno]')?.dataset?.empno ||
-    newEvent.extendedProps?.empNo ||
-    newEvent.extendedProps?.employeeNo ||
-    null;
-
-  // 🧠 If REST pill is dropped, do NOT carry over empNo (break shared reference)
-  if (type === 'rest') {
-    try {
-      newEvent.setExtendedProp('empNo', null);
-      newEvent.setExtendedProp('employeeNo', null);
-    } catch (e) {}
+  const empNo = newEvent.extendedProps?.empNo || newEvent.extendedProps?.employeeNo;
+  const dateStr = newEvent.startStr;
+  if (!empNo) {
+    console.warn('No employee number on dropped event');
+    return;
   }
 
-  const dateStr = newEvent.startStr;
-  const empNoToUse = type === 'rest' ? null : droppedEmpNo;
-  const color = empNoToUse ? ensureEmployeeColor(empNoToUse) : '#94a3b8';
-  const id = newEvent.extendedProps?.id || newEvent.id || crypto?.randomUUID?.() || `evt-${Date.now()}`;
-
-  // Apply class & style
+  // --- Style and color setup ---
+  const color = ensureEmployeeColor(empNo);
   const grad = getGradientFromBaseColor(color, type);
   const classNames = ['fc-event-pill', `fc-event-${type}`];
   const forceStyle =
@@ -780,18 +763,18 @@ eventReceive: function (info) {
     newEvent.setProp('textColor', type === 'rest' ? color : '#fff');
   } catch (e) {}
 
-  // Conflict check only for WORK type
-  if (type === 'work' && empNoToUse) {
-    const conflict = findExistingShiftForEmployee(empNoToUse, dateStr, { exclude: [newEvent] });
+  // --- Duplicate detection only for Work ---
+  if (type === 'work') {
+    const conflict = findExistingShiftForEmployee(empNo, dateStr, { exclude: [newEvent] });
     if (conflict) {
-      const employeeName = employees[empNoToUse]?.name || empNoToUse;
-      showToast(`Duplicate entry blocked: ${employeeName} already has a shift on this date.`, 'error');
+      const name = employees[empNo]?.name || empNo;
+      showToast(`Duplicate entry blocked: ${name} already has a shift on this date.`, 'error');
       newEvent.remove();
       return;
     }
   }
 
-  // Behavior per type
+  // --- Type-specific behavior ---
   if (type === 'work') {
     currentDroppingEvent = newEvent;
     openShiftModal();
@@ -801,7 +784,18 @@ eventReceive: function (info) {
     saveToLocalStorage();
   }
 
-  decorateEventLater(newEvent);
+  // --- Force immediate visual update (fixes first-drop "N/A") ---
+  try {
+    const t = newEvent.title;
+    newEvent.setProp('title', t);
+  } catch (e) {}
+
+  // --- Apply decorations and tooltip updates ---
+  try {
+    decorateEventLater(newEvent);
+  } catch (e) {
+    console.warn('decorateEventLater failed', e);
+  }
 },
 
     /**
