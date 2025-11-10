@@ -412,6 +412,28 @@ const shiftTimes = {
   "WHSE-012": "9:00AM - 1:00PM"
 };
 
+function formatShiftTime(raw) {
+  if (!raw) return '';
+  const trimmed = String(raw).trim();
+  if (!trimmed) return '';
+
+  const normalizeTimeToken = token => {
+    const t = token.trim();
+    const match = t.match(/^(\d{1,2}:\d{2})\s*([AaPp][Mm])$/);
+    if (!match) return t.replace(/\s+/g, ' ');
+    return `${match[1]} ${match[2].toUpperCase()}`;
+  };
+
+  const rangeMatch = trimmed.match(/^(.*?)\s*[-–]\s*(.*?)$/);
+  if (!rangeMatch) {
+    return normalizeTimeToken(trimmed);
+  }
+
+  const start = normalizeTimeToken(rangeMatch[1]);
+  const end = normalizeTimeToken(rangeMatch[2]);
+  return `${start} – ${end}`;
+}
+
 const shiftSelect = (typeof TomSelect !== 'undefined' && document.querySelector("#shift-preset")) ? new TomSelect("#shift-preset", {
   create: false,
   sortField: { field: "text", direction: "asc" },
@@ -421,12 +443,14 @@ const shiftSelect = (typeof TomSelect !== 'undefined' && document.querySelector(
     option: function (data, escape) {
       const code = data.value;
       const time = shiftTimes[code] || "";
-      return `<div>${escape(code)} ${time ? `(${escape(time)})` : ""}</div>`;
+      const formattedTime = formatShiftTime(time);
+      return `<div>${escape(code)} ${formattedTime ? `(${escape(formattedTime)})` : ""}</div>`;
     },
     item: function (data, escape) {
       const code = data.value;
       const time = shiftTimes[code] || "";
-      return `<div>${escape(code)} ${time ? `(${escape(time)})` : ""}</div>`;
+      const formattedTime = formatShiftTime(time);
+      return `<div>${escape(code)} ${formattedTime ? `(${escape(formattedTime)})` : ""}</div>`;
     }
   }
 }) : null;
@@ -823,12 +847,20 @@ eventReceive: function(info) {
       }
 
       try {
+        const shiftLabel = type === 'work' ? 'Work' : 'Rest';
+        const shiftTimeRaw = shiftCode && shiftTimes[shiftCode] ? shiftTimes[shiftCode] : '';
+        const formattedShiftTime = formatShiftTime(shiftTimeRaw);
+        const shiftCodeText = shiftCode ? escapeHtml(shiftCode) : 'N/A';
+        const shiftCodeWithTime = shiftCode
+          ? `${shiftCodeText}${formattedShiftTime ? `&nbsp;&nbsp;${escapeHtml(formattedShiftTime)}` : ''}`
+          : 'N/A';
         tippy(info.el, {
           content: `
-            <div class='text-sm'>
-              <div><strong>Employee #:</strong> ${emp ? emp.empNo : empNo}</div>
-              <div><strong>Position:</strong> ${emp ? emp.position : 'N/A'}</div>
-              <div><strong>Shift:</strong> ${type === 'work' ? 'Work' : 'Rest'}</div>
+            <div class='text-sm space-y-1'>
+              <div><strong>Employee #:</strong> ${escapeHtml(emp ? emp.empNo : empNo)}</div>
+              <div><strong>Position:</strong> ${escapeHtml(emp ? emp.position : 'N/A')}</div>
+              <div><strong>Shift Code:</strong> ${shiftCodeWithTime}</div>
+              <div><strong>Shift:</strong> ${shiftLabel}</div>
             </div>
           `,
           allowHTML: true,
