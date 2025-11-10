@@ -2234,9 +2234,14 @@ if (!window.__schedulerContextMenuInit) {
   document.addEventListener('contextmenu', e => {
     const pill = e.target.closest('.schedule-pill');
     const dateEl = e.target.closest('.fc-daygrid-day, .fc-timegrid-slot');
-    if (pill && !pill.classList.contains('selected')) {
-      const keepOthers = hasMultiSelectModifier(e);
-      toggleScheduleSelection(pill, keepOthers);
+    const keepOthers = hasMultiSelectModifier(e);
+
+    if (pill) {
+      if (keepOthers) {
+        toggleScheduleSelection(pill, true);
+      } else if (!pill.classList.contains('selected')) {
+        toggleScheduleSelection(pill, false);
+      }
     }
 
     e.preventDefault();
