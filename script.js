@@ -200,6 +200,7 @@ function getGradientFromBaseColor(hex, type = 'work') {
             // State for modals
             let currentDroppingEvent = null;
             let currentDeletingEvent = null;
+            let isEditingExistingEvent = false;
             // track the hovered schedule pill for reliable key-based copy/paste detection
             let hoveredScheduleId = null;
             let pasteHistory = [];
@@ -1105,8 +1106,15 @@ document.querySelectorAll('#draggable-cards-container > div').forEach(card => {
             
             // --- MODAL & UI LOGIC ---
 
-            function openShiftModal() {
+            function openShiftModal(options = {}) {
                 if (!shiftModal) return;
+
+                const { initialShiftCode = '', useLastUsedWhenEmpty = true } = options;
+                const normalizedInitial = initialShiftCode ? String(initialShiftCode).trim() : '';
+
+                if (shiftSelect) {
+                    try { shiftSelect.clear(); } catch (e) {}
+                }
                 if (shiftPresetSelect) shiftPresetSelect.value = '';
                 if (shiftCustomInput) shiftCustomInput.value = '';
 
@@ -1117,8 +1125,28 @@ document.querySelectorAll('#draggable-cards-container > div').forEach(card => {
                     });
                 }
 
-                if (window.lastUsedShiftCode && shiftSelect) {
-                    shiftSelect.setValue(window.lastUsedShiftCode);
+                if (normalizedInitial) {
+                    const cleanInitial = normalizedInitial.split(' ')[0];
+                    let presetMatched = false;
+                    if (shiftPresetSelect) {
+                        const optionsArr = Array.from(shiftPresetSelect.options);
+                        presetMatched = optionsArr.some(opt => opt.value === cleanInitial);
+                        if (presetMatched) shiftPresetSelect.value = cleanInitial;
+                    }
+                    if (shiftSelect && presetMatched) {
+                        try { shiftSelect.setValue(cleanInitial); } catch (e) {}
+                    }
+                    if (shiftCustomInput) {
+                        shiftCustomInput.value = presetMatched ? '' : cleanInitial;
+                    }
+                } else if (useLastUsedWhenEmpty && window.lastUsedShiftCode) {
+                    const last = String(window.lastUsedShiftCode).split(' ')[0];
+                    if (shiftSelect) {
+                        try { shiftSelect.setValue(last); }
+                        catch (e) { if (shiftPresetSelect) shiftPresetSelect.value = last; }
+                    } else if (shiftPresetSelect) {
+                        shiftPresetSelect.value = last;
+                    }
                 }
 
                 shiftModal.classList.remove('hidden');
@@ -1183,6 +1211,7 @@ if (shiftSearchInput && shiftPresetSelect) {
             
               if (shiftModal) closeModal(shiftModal);
               currentDroppingEvent = null;
+              isEditingExistingEvent = false;
             }
 
             function openDeleteModal(event) {
@@ -1235,12 +1264,17 @@ if (shiftSearchInput && shiftPresetSelect) {
                 const modalEl = document.getElementById(modalId);
                 closeModal(modalEl);
 
-                if (modalId === 'shift-modal' && currentDroppingEvent) {
+                if (modalId === 'shift-modal' && currentDroppingEvent && !isEditingExistingEvent) {
                     currentDroppingEvent.remove();
                     showToast('Schedule add canceled.', 'info');
-                    currentDroppingEvent = null;
+                    saveToLocalStorage();
                 }
-                
+
+                if (modalId === 'shift-modal') {
+                    currentDroppingEvent = null;
+                    isEditingExistingEvent = false;
+                }
+
                 if (modalId === 'delete-modal') {
                     currentDeletingEvent = null;
                 }
@@ -1907,13 +1941,14 @@ if (!window.__schedulerContextMenuInit) {
     const id = String(rawId);
     const elements = getScheduleElementsById(id);
     const needsRetry = !elements.length;
+    const targetElements = elements.length ? elements : (el ? [el] : []);
     if (!keepOthers) clearScheduleSelection();
     if (selectedSchedules.has(id)) {
       selectedSchedules.delete(id);
-      elements.forEach(node => node.classList.remove('selected', 'ring-2', 'ring-blue-500', 'shadow-lg', 'drag-preview'));
+      targetElements.forEach(node => node.classList.remove('selected', 'ring-2', 'ring-blue-500', 'shadow-lg', 'drag-preview'));
     } else {
       selectedSchedules.add(id);
-      elements.forEach(node => node.classList.add('selected', 'ring-2', 'ring-blue-500', 'shadow-lg'));
+      targetElements.forEach(node => node.classList.add('selected', 'ring-2', 'ring-blue-500', 'shadow-lg'));
       if (needsRetry) highlightSelectionByIds([id]);
     }
   }
@@ -2025,7 +2060,7 @@ if (!window.__schedulerContextMenuInit) {
       });
     });
 
-    queueSelectionReset(createdIdsForBatch);
+    clearScheduleSelection();
 
     if (createdIdsForBatch.length) {
       pasteHistory.push(createdIdsForBatch);
@@ -2080,6 +2115,23 @@ if (!window.__schedulerContextMenuInit) {
     menu.id = 'context-menu';
     menu.className = 'absolute bg-white border border-gray-300 rounded shadow-lg z-50';
     menu.style.left = `${x}px`; menu.style.top = `${y}px`; menu.style.minWidth = '180px';
+
+    const scheduleId = pill ? getScheduleIdFromElement(pill) : null;
+    const contextEvent = scheduleId ? findCalendarEventByScheduleId(String(scheduleId)) : null;
+
+    if (contextEvent) {
+      const editBtn = document.createElement('button');
+      editBtn.className = 'block w-full text-left px-4 py-2 hover:bg-gray-100';
+      editBtn.innerText = '✏️ Edit Shift Code';
+      editBtn.onclick = () => {
+        currentDroppingEvent = contextEvent;
+        isEditingExistingEvent = true;
+        const existingCode = contextEvent.extendedProps?.shiftCode ?? '';
+        openShiftModal({ initialShiftCode: existingCode, useLastUsedWhenEmpty: false });
+        removeContextMenu();
+      };
+      menu.appendChild(editBtn);
+    }
 
     if (selectedSchedules.size) {
       const btn = document.createElement('button');
@@ -2161,10 +2213,10 @@ if (!window.__schedulerContextMenuInit) {
       const pillId = getScheduleIdFromElement(pill) || pill.dataset.id;
       const normalizedId = pillId ? String(pillId) : null;
       const isModifier = e.ctrlKey || e.metaKey;
-      if (isModifier && normalizedId && !selectedSchedules.has(normalizedId)) {
-        toggleScheduleSelection(pill, true);
+      if (isModifier) {
+        return;
       }
-      const canDragGroup = normalizedId && selectedSchedules.size > 1 && (selectedSchedules.has(normalizedId) || isModifier);
+      const canDragGroup = normalizedId && selectedSchedules.size > 1 && selectedSchedules.has(normalizedId);
       if (canDragGroup) {
         e.preventDefault();
         e.stopPropagation();
