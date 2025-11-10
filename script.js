@@ -609,7 +609,8 @@ function loadFromLocalStorage() {
               color: '#fff',
               border: 'none'
             }
-          };
+          } // <-- added the missing closing brace for the outer object
+        };
         const restEventData = {
           title: emp.name,
           classNames: ['fc-event-pill', 'fc-event-rest'],

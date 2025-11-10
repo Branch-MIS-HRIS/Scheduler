@@ -355,7 +355,7 @@ tbody tr:hover {
   align-items: center;
   justify-content: flex-start;
   gap: 8px;
-  width: 100%;
+  width: auto; /* changed from 100% so mirror doesn't stretch full width while dragging */
   box-sizing: border-box;
   margin: 2px 0;
   overflow: hidden;
@@ -426,7 +426,7 @@ body.multi-dragging { cursor: grabbing; }
 .pill-content {
   display: flex;
   align-items: center;
-  width: 100%;
+  width: auto; /* keep content compact so drag-mirror centers correctly */
   gap: 8px;
   min-width: 0;
   overflow: visible;
