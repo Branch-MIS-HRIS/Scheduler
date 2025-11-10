@@ -434,6 +434,52 @@ function formatShiftTime(raw) {
   return `${start} – ${end}`;
 }
 
+function buildEventTooltipContent(event) {
+  if (!event) return '';
+  const ext = event.extendedProps || {};
+  const empNo = ext.empNo;
+  const employee = empNo != null && employees ? employees[empNo] : null;
+  const typeLabel = ext.type === 'rest' ? 'Rest' : 'Work';
+  const shiftCode = ext.shiftCode;
+  const shiftTimeRaw = shiftCode && shiftTimes[shiftCode] ? shiftTimes[shiftCode] : '';
+  const formattedShiftTime = formatShiftTime(shiftTimeRaw);
+  const shiftCodeText = shiftCode ? escapeHtml(shiftCode) : 'N/A';
+  const shiftCodeWithTime = shiftCode
+    ? `${shiftCodeText}${formattedShiftTime ? `&nbsp;&nbsp;${escapeHtml(formattedShiftTime)}` : ''}`
+    : 'N/A';
+  const employeeNumber = employee && employee.empNo != null ? employee.empNo : (empNo ?? 'N/A');
+  const position = employee && employee.position ? employee.position : 'N/A';
+
+  return `
+            <div class='text-sm space-y-1'>
+              <div><strong>Employee #:</strong> ${escapeHtml(employeeNumber)}</div>
+              <div><strong>Position:</strong> ${escapeHtml(position)}</div>
+              <div><strong>Shift Code:</strong> ${shiftCodeWithTime}</div>
+              <div><strong>Shift:</strong> ${escapeHtml(typeLabel)}</div>
+            </div>
+          `;
+}
+
+function refreshEventTooltip(event, el) {
+  if (!event || typeof tippy === 'undefined') return;
+  const target = el || (typeof findEventElementByEvent === 'function' ? findEventElementByEvent(event) : null);
+  if (!target) return;
+
+  const content = buildEventTooltipContent(event);
+  try {
+    if (target._tippy) {
+      target._tippy.setContent(content);
+    } else {
+      tippy(target, {
+        content,
+        allowHTML: true,
+        theme: 'light-border',
+        placement: 'top',
+      });
+    }
+  } catch (e) {}
+}
+
 const shiftSelect = (typeof TomSelect !== 'undefined' && document.querySelector("#shift-preset")) ? new TomSelect("#shift-preset", {
   create: false,
   sortField: { field: "text", direction: "asc" },
@@ -846,28 +892,7 @@ eventReceive: function(info) {
         }
       }
 
-      try {
-        const shiftLabel = type === 'work' ? 'Work' : 'Rest';
-        const shiftTimeRaw = shiftCode && shiftTimes[shiftCode] ? shiftTimes[shiftCode] : '';
-        const formattedShiftTime = formatShiftTime(shiftTimeRaw);
-        const shiftCodeText = shiftCode ? escapeHtml(shiftCode) : 'N/A';
-        const shiftCodeWithTime = shiftCode
-          ? `${shiftCodeText}${formattedShiftTime ? `&nbsp;&nbsp;${escapeHtml(formattedShiftTime)}` : ''}`
-          : 'N/A';
-        tippy(info.el, {
-          content: `
-            <div class='text-sm space-y-1'>
-              <div><strong>Employee #:</strong> ${escapeHtml(emp ? emp.empNo : empNo)}</div>
-              <div><strong>Position:</strong> ${escapeHtml(emp ? emp.position : 'N/A')}</div>
-              <div><strong>Shift Code:</strong> ${shiftCodeWithTime}</div>
-              <div><strong>Shift:</strong> ${shiftLabel}</div>
-            </div>
-          `,
-          allowHTML: true,
-          theme: 'light-border',
-          placement: 'top',
-        });
-      } catch (e) {}
+      refreshEventTooltip(info.event, info.el);
 
       if (!emp) {
         console.error(`Event ${info.event.id || ''} has invalid employee data (empNo: ${empNo}). Hiding event.`);
@@ -1280,6 +1305,7 @@ if (shiftSearchInput && shiftPresetSelect) {
                   currentDroppingEvent.setProp('classNames', Array.from(classSet));
                 } catch (e) {}
                 decorateEventLater(currentDroppingEvent);
+                refreshEventTooltip(currentDroppingEvent);
                 runConflictDetection();
                 updateStats();
                 saveToLocalStorage();
@@ -1810,6 +1836,8 @@ function ensurePillStructure(event, el) {
   } else if (shiftSpan) {
     shiftSpan.remove();
   }
+
+  refreshEventTooltip(event, el);
 }
 
 function decorateSingleEventElement(event, el) {
