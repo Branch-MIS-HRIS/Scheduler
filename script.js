@@ -25,6 +25,8 @@ function escapeHtml(str) {
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;');
 }
+
+const hasMultiSelectModifier = evt => !!(evt && (evt.ctrlKey || evt.metaKey));
             
             // --- STATE & CONFIG ---
             
@@ -691,7 +693,7 @@ eventReceive: function(info) {
      * Fired when an event is clicked.
      */
     eventClick: function(info) {
-      if (info.jsEvent && (info.jsEvent.ctrlKey || info.jsEvent.metaKey)) {
+      if (info.jsEvent && hasMultiSelectModifier(info.jsEvent)) {
         info.jsEvent.preventDefault();
         return;
       }
@@ -1781,7 +1783,7 @@ function decorateSingleEventElement(event, el) {
 
   if (!el.__scheduleSelectionHandler) {
     const handler = e => {
-      if (e.ctrlKey || e.metaKey) {
+      if (hasMultiSelectModifier(e)) {
         e.preventDefault();
         e.stopPropagation();
         toggleScheduleSelection(el, true);
@@ -2174,7 +2176,7 @@ if (!window.__schedulerContextMenuInit) {
   document.addEventListener('keydown', e => {
     const tag = e.target?.tagName?.toLowerCase();
     if (tag === 'input' || tag === 'textarea' || e.target?.isContentEditable) return;
-    if (!(e.ctrlKey || e.metaKey)) return;
+    if (!hasMultiSelectModifier(e)) return;
     if (e.repeat) return;
 
     const key = (e.key || '').toLowerCase();
@@ -2212,7 +2214,7 @@ if (!window.__schedulerContextMenuInit) {
     if (pill) {
       const pillId = getScheduleIdFromElement(pill) || pill.dataset.id;
       const normalizedId = pillId ? String(pillId) : null;
-      const isModifier = e.ctrlKey || e.metaKey;
+      const isModifier = hasMultiSelectModifier(e);
       if (isModifier) {
         return;
       }
@@ -2240,7 +2242,7 @@ if (!window.__schedulerContextMenuInit) {
     if (day) {
       isSelectingDates = true;
       dateSelectStartEl = day;
-      if (!(e.ctrlKey || e.metaKey)) clearTargetDateSelection();
+      if (!hasMultiSelectModifier(e)) clearTargetDateSelection();
       toggleTargetDateSelection(day, true);
       document.body.classList.add('no-select');
     }
