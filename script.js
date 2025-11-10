@@ -1254,10 +1254,8 @@ function getDateUnderPointer() {
         const day = daysOfWeek[e.start.getDay()];
         workData.push([emp.name, emp.empNo, emp.position || 'N/A', e.startStr, shift, day]);
       });
-      // (no blank row between employees)
     });
     const wsWork = XLSX.utils.aoa_to_sheet(workData);
-    // Bold header if supported
     try {
       for (let c = 0; c < workData[0].length; c++) {
         const addr = XLSX.utils.encode_cell({ c, r: 0 });
@@ -1276,7 +1274,6 @@ function getDateUnderPointer() {
         const day = daysOfWeek[e.start.getDay()];
         restData.push([emp.name, emp.empNo, emp.position || 'N/A', e.startStr, day]);
       });
-      // (no blank row between employees)
     });
     const wsRest = XLSX.utils.aoa_to_sheet(restData);
     try {
@@ -1287,55 +1284,6 @@ function getDateUnderPointer() {
       }
     } catch (_) {}
     XLSX.utils.book_append_sheet(wb, wsRest, 'Rest Schedule');
-
-    // ===== Combined sheet: "WS & RD" =====
-    // 3 empty spacer columns between the two blocks
-    const spacer = ['', '', ''];
-    const consHeader = [
-      'NAME','EMPLOYEE NO.','WORK DATE','SHIFT CODE','DAY OF WEEK','POSITION',
-      ...spacer,
-      'NAME','EMPLOYEE NO.','REST DAY DATE','DAY OF WEEK','POSITION'
-    ];
-    const consolidated = [consHeader];
-
-    empOrder.forEach(empNo => {
-      const emp = getEmp(empNo);
-      const left = byEmp[empNo].work.slice().sort((a,b) => a.start - b.start).map(e => [
-        emp.name, emp.empNo, e.startStr, (e?.extendedProps?.shiftCode) || 'N/A',
-        daysOfWeek[e.start.getDay()], emp.position || 'N/A'
-      ]);
-      const right = byEmp[empNo].rest.slice().sort((a,b) => a.start - b.start).map(e => [
-        emp.name, emp.empNo, e.startStr,
-        daysOfWeek[e.start.getDay()], emp.position || 'N/A'
-      ]);
-      const maxLen = Math.max(left.length, right.length, 1);
-      for (let i = 0; i < maxLen; i++) {
-        const l = left[i]  || [emp.name, emp.empNo, '', '', '', emp.position || 'N/A'];
-        const r = right[i] || [emp.name, emp.empNo, '', '',        emp.position || 'N/A'];
-        consolidated.push([...l, ...spacer, ...r]);
-      }
-      // (no blank row between employees)
-    });
-
-    const wsCons = XLSX.utils.aoa_to_sheet(consolidated);
-    // Column widths to emphasize the 3-column gap
-    try {
-      const totalCols = consolidated[0].length;
-      wsCons['!cols'] = Array.from({length: totalCols}, (_, i) => {
-        // Make spacer columns narrow to look like a gap
-        if (i >= 6 && i <= 8) return { wch: 3 };
-        return { wch: 18 };
-      });
-    } catch (_) {}
-    // Bold header if supported
-    try {
-      for (let c = 0; c < consHeader.length; c++) {
-        const addr = XLSX.utils.encode_cell({ c, r: 0 });
-        if (!wsCons[addr]) continue;
-        wsCons[addr].s = Object.assign({}, wsCons[addr].s || {}, { font: { bold: true } });
-      }
-    } catch (_) {}
-    XLSX.utils.book_append_sheet(wb, wsCons, 'WS & RD');
 
     // ===== Conflict Summary (unchanged grouping) =====
     if (conflicts && conflicts.length > 0) {
