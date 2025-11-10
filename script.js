@@ -64,6 +64,94 @@ function ensureEmployeeColor(empNo) {
   return color;
 }
 
+function pruneEmployeeColors(activeEmpNos = []) {
+  if (!employeeColors) employeeColors = {};
+  const activeSet = new Set(activeEmpNos.map(v => String(v)));
+  Object.keys(employeeColors).forEach(key => {
+    if (!activeSet.has(String(key))) delete employeeColors[key];
+  });
+}
+
+function escapeSelector(value) {
+  if (typeof value === 'undefined' || value === null) return '';
+  const str = String(value);
+  if (typeof CSS !== 'undefined' && CSS.escape) return CSS.escape(str);
+  return str.replace(/"/g, '\\"');
+}
+
+function updateEmployeeColorStyles(empNo) {
+  if (!empNo) return null;
+  const color = ensureEmployeeColor(empNo);
+  if (!color) return null;
+
+  const workGradient = getGradientFromBaseColor(color, 'work');
+  const restGradient = getGradientFromBaseColor(color, 'rest');
+
+  if (draggableCardsContainer) {
+    const selector = `[data-empno="${escapeSelector(empNo)}"]`;
+    draggableCardsContainer.querySelectorAll(selector).forEach(card => {
+      card.style.borderLeft = `6px solid ${color}`;
+      card.style.background = `linear-gradient(to right, ${color}22, ${color}08)`;
+      const workPill = card.querySelector('.fc-event-work');
+      const restPill = card.querySelector('.fc-event-rest');
+      if (workPill) {
+        workPill.style.background = workGradient;
+        workPill.style.color = '#fff';
+        workPill.style.border = 'none';
+        try {
+          const payload = JSON.parse(workPill.getAttribute('data-event') || '{}');
+          payload.extendedProps = payload.extendedProps || {};
+          payload.extendedProps.forceStyle = { background: workGradient, backgroundImage: 'none', color: '#fff', border: 'none' };
+          payload.extendedProps.empNo = empNo;
+          const classSet = new Set([...(Array.isArray(payload.classNames) ? payload.classNames : []), 'fc-event-pill', 'fc-event-work']);
+          payload.classNames = Array.from(classSet);
+          workPill.setAttribute('data-event', JSON.stringify(payload));
+        } catch (e) {}
+      }
+      if (restPill) {
+        restPill.style.background = restGradient;
+        restPill.style.color = color;
+        restPill.style.border = `2px solid ${color}`;
+        try {
+          const payload = JSON.parse(restPill.getAttribute('data-event') || '{}');
+          payload.extendedProps = payload.extendedProps || {};
+          payload.extendedProps.forceStyle = { background: restGradient, backgroundImage: 'none', color, border: `2px solid ${color}` };
+          payload.extendedProps.empNo = empNo;
+          const classSet = new Set([...(Array.isArray(payload.classNames) ? payload.classNames : []), 'fc-event-pill', 'fc-event-rest']);
+          payload.classNames = Array.from(classSet);
+          restPill.setAttribute('data-event', JSON.stringify(payload));
+        } catch (e) {}
+      }
+    });
+  }
+
+  if (calendar && typeof calendar.getEvents === 'function') {
+    const events = calendar.getEvents().filter(ev => String(ev.extendedProps?.empNo) === String(empNo));
+    events.forEach(event => {
+      const type = event.extendedProps?.type === 'rest' ? 'rest' : 'work';
+      const gradient = type === 'rest' ? restGradient : workGradient;
+      const forceStyle = type === 'rest'
+        ? { background: gradient, backgroundImage: 'none', color, border: `2px solid ${color}` }
+        : { background: gradient, backgroundImage: 'none', color: '#fff', border: 'none' };
+      event.setExtendedProp('forceStyle', forceStyle);
+      try {
+        event.setProp('backgroundColor', '');
+        event.setProp('borderColor', type === 'rest' ? color : 'transparent');
+        event.setProp('textColor', type === 'rest' ? color : '#fff');
+      } catch (e) {}
+      decorateEventLater(event);
+    });
+  }
+
+  return { color, workGradient, restGradient };
+}
+
+function refreshEmployeeColors(empNos = []) {
+  const targets = empNos.length ? empNos : Object.keys(employees || {});
+  targets.forEach(empNo => updateEmployeeColorStyles(empNo));
+  try { localStorage.setItem('employeeColors', JSON.stringify(employeeColors)); } catch (e) {}
+}
+
 /* ====== MOVED HELPERS: make gradient/color helpers top-level so other code can use them ====== */
 function rgbToHsl(r, g, b) {
   r /= 255; g /= 255; b /= 255;
@@ -121,6 +209,8 @@ function getGradientFromBaseColor(hex, type = 'work') {
             let lastMouseX = 0, lastMouseY = 0;
             let isDragging = false, dragGhost = null;
             let isSelectingDates = false, dateSelectStartEl = null;
+            let dragAnchorDate = null;
+            let dragSelectionEvents = [];
             
             // Configs
             const positionOptions = ['Branch Head', 'Site Supervisor', 'OIC', 'Mac Expert', 'Cashier'];
@@ -351,6 +441,7 @@ function loadFromLocalStorage() {
 
       // ensure employeeColors is available (persisted earlier by saveToLocalStorage)
       employeeColors = JSON.parse(localStorage.getItem('employeeColors')) || employeeColors || {};
+      pruneEmployeeColors(Object.keys(employees));
 
       Object.values(employees).forEach(emp => {
         const color = ensureEmployeeColor(emp.empNo);
@@ -416,8 +507,9 @@ function loadFromLocalStorage() {
 
       if (draggablePlaceholder) draggablePlaceholder.classList.add('hidden');
       initializeDraggable();
+      refreshEmployeeColors(Object.keys(employees));
     }
-  
+
     if (storedEvents && storedEvents.length > 0 && calendar) {
       storedEvents.forEach(ev => {
         const addedEvent = calendar.addEvent({
@@ -922,6 +1014,8 @@ if (calendar && typeof calendar.on === 'function') {
                     return;
                 }
 
+                pruneEmployeeColors(Object.keys(employees));
+
 // --- Generate Cards with Persistent Colors ---
 Object.values(employees).forEach(emp => {
   const color = ensureEmployeeColor(emp.empNo);
@@ -994,8 +1088,9 @@ Object.values(employees).forEach(emp => {
                 if (draggablePlaceholder) draggablePlaceholder.classList.add('hidden');
                 
                 initializeDraggable();
-                
+
                 updateStats();
+                refreshEmployeeColors(Object.keys(employees));
                 showToast('Employees saved and cards generated. You can now drag schedules.', 'success');
                 saveToLocalStorage();
 
@@ -1735,6 +1830,12 @@ if (!window.__schedulerContextMenuInit) {
     return qAll(`.schedule-pill[data-id="${escaped}"], .fc-event-pill[data-id="${escaped}"]`, root);
   }
 
+  function findCalendarEventByScheduleId(id) {
+    if (!calendar) return null;
+    const events = calendar.getEvents();
+    return events.find(ev => String(ev.extendedProps?.id) === String(id) || String(ev.id) === String(id)) || null;
+  }
+
   function highlightSelectionByIds(ids, attempt = 0) {
     const missing = [];
     ids.forEach(id => {
@@ -2022,6 +2123,7 @@ if (!window.__schedulerContextMenuInit) {
     const tag = e.target?.tagName?.toLowerCase();
     if (tag === 'input' || tag === 'textarea' || e.target?.isContentEditable) return;
     if (!(e.ctrlKey || e.metaKey)) return;
+    if (e.repeat) return;
 
     const key = (e.key || '').toLowerCase();
     if (key === 'c') { e.preventDefault(); copySelectedSchedules(); }
@@ -2029,9 +2131,18 @@ if (!window.__schedulerContextMenuInit) {
       e.preventDefault();
       const el = document.elementFromPoint(lastMouseX, lastMouseY);
       const dateEl = el?.closest('.fc-daygrid-day, .fc-timegrid-slot');
-      if (selectedTargetDates.size) pasteSchedulesToDates(Array.from(selectedTargetDates));
-      else if (dateEl) pasteSchedulesToDates([dateEl.getAttribute('data-date')]);
-      else showToastWrapper('Hover over a date or select target dates to paste.', 'warn');
+      if (selectedTargetDates.size > 1) {
+        pasteSchedulesToDates(Array.from(selectedTargetDates));
+      } else if (selectedTargetDates.size === 1) {
+        const [single] = Array.from(selectedTargetDates);
+        pasteSchedulesToDates([single]);
+      } else if (dateEl) {
+        const dateStr = dateEl.getAttribute('data-date');
+        if (dateStr) pasteSchedulesToDates([dateStr]);
+        else showToastWrapper('Hover over a date or select target dates to paste.', 'warn');
+      } else {
+        showToastWrapper('Hover over a date or select target dates to paste.', 'warn');
+      }
     }
     if (key === 'z') {
       e.preventDefault();
@@ -2058,6 +2169,14 @@ if (!window.__schedulerContextMenuInit) {
         e.preventDefault();
         e.stopPropagation();
         buildCopiedFromSelected({ silent: true });
+        dragSelectionEvents = Array.from(selectedSchedules).map(id => findCalendarEventByScheduleId(String(id))).filter(Boolean);
+        const anchorEvent = findCalendarEventByScheduleId(normalizedId) || dragSelectionEvents[0] || null;
+        dragAnchorDate = anchorEvent ? anchorEvent.startStr : null;
+        if (!dragSelectionEvents.length || !dragAnchorDate) {
+          dragSelectionEvents = [];
+          dragAnchorDate = null;
+          return;
+        }
         isDragging = true;
         window.__multiSelectDragActive = true;
         createDragGhost(selectedSchedules.size);
@@ -2102,20 +2221,87 @@ if (!window.__schedulerContextMenuInit) {
     if (isDragging) {
       const el = document.elementFromPoint(e.clientX, e.clientY);
       const dateEl = el?.closest('.fc-daygrid-day, .fc-timegrid-slot');
-      buildCopiedFromSelected({ silent: true });
-      if (dateEl) {
-        pasteSchedulesToDates([dateEl.getAttribute('data-date')]);
+      const targetDateStr = dateEl?.getAttribute('data-date');
+      let moved = false;
+      let attempted = false;
+      if (targetDateStr) {
+        attempted = true;
+        moved = moveDraggedSchedules(targetDateStr);
+      } else if (selectedTargetDates.size) {
+        const [singleTarget] = Array.from(selectedTargetDates);
+        if (singleTarget) {
+          attempted = true;
+          moved = moveDraggedSchedules(singleTarget);
+        }
       }
-      else if (selectedTargetDates.size) pasteSchedulesToDates(Array.from(selectedTargetDates));
-      else showToastWrapper('Drop target not valid.', 'warn');
+      if (!moved && !attempted) showToastWrapper('Drop target not valid.', 'warn');
       removeDragGhost();
       isDragging = false;
       window.__multiSelectDragActive = false;
       document.body.classList.remove('no-select');
+      buildCopiedFromSelected({ silent: true });
+      return;
     }
 
     if (isSelectingDates) { isSelectingDates = false; dateSelectStartEl = null; document.body.classList.remove('no-select'); }
   });
+
+  function moveDraggedSchedules(targetDateStr) {
+    if (!calendar) return false;
+    if (!dragSelectionEvents.length || !dragAnchorDate) return false;
+    const targetDate = new Date(targetDateStr);
+    const anchorDate = new Date(dragAnchorDate);
+    if (Number.isNaN(targetDate.getTime())) {
+      showToastWrapper('Drop target not valid.', 'warn');
+      return false;
+    }
+    if (Number.isNaN(anchorDate.getTime())) return false;
+
+    const msPerDay = 24 * 60 * 60 * 1000;
+    const offsetDays = Math.round((targetDate - anchorDate) / msPerDay);
+
+    const plannedMoves = dragSelectionEvents.map(event => {
+      const original = new Date(event.startStr);
+      original.setDate(original.getDate() + offsetDays);
+      const newDateStr = original.toISOString().split('T')[0];
+      return { event, newDateStr };
+    });
+
+    const eventsToIgnore = new Set(dragSelectionEvents);
+    const hasConflict = plannedMoves.some(({ event, newDateStr }) => {
+      const empNo = event.extendedProps?.empNo;
+      const type = event.extendedProps?.type;
+      return calendar.getEvents().some(other => {
+        if (eventsToIgnore.has(other)) return false;
+        return (
+          String(other.extendedProps?.empNo) === String(empNo) &&
+          String(other.extendedProps?.type) === String(type) &&
+          other.startStr === newDateStr
+        );
+      });
+    });
+
+    if (hasConflict) {
+      showToastWrapper('Move cancelled: a selected employee already has that schedule.', 'error');
+      return false;
+    }
+
+    plannedMoves.forEach(({ event, newDateStr }) => {
+      event.setStart(newDateStr);
+      try { event.setEnd(newDateStr); } catch (e) {}
+      decorateEventLater(event);
+    });
+
+    queueSelectionReset(dragSelectionEvents.map(ev => ev.extendedProps?.id || ev.id));
+    clearTargetDateSelection();
+    dragAnchorDate = targetDateStr;
+
+    runConflictDetection();
+    updateStats();
+    saveToLocalStorage();
+    showToastWrapper(`Moved ${plannedMoves.length} schedule${plannedMoves.length !== 1 ? 's' : ''}.`, 'success');
+    return true;
+  }
 
   function createDragGhost(count) {
     removeDragGhost({ keepPreview: true });
@@ -2139,6 +2325,8 @@ if (!window.__schedulerContextMenuInit) {
     if (!keepPreview) {
       applyDragPreviewToSelection(false);
     }
+    dragSelectionEvents = [];
+    dragAnchorDate = null;
   }
 
   function buildCopiedFromSelected(options = {}) {
