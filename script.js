@@ -609,8 +609,7 @@ function loadFromLocalStorage() {
               color: '#fff',
               border: 'none'
             }
-          }
-        };
+          };
         const restEventData = {
           title: emp.name,
           classNames: ['fc-event-pill', 'fc-event-rest'],
@@ -1633,6 +1632,7 @@ if (shiftSearchInput && shiftPresetSelect) {
                         const emp = employees[e.extendedProps.empNo] || { name: 'N/A', empNo: e.extendedProps.empNo, position: 'N/A' };
                         workData.push([
                             emp.name,
+
                             emp.empNo,
                             emp.position,
                             e.startStr,
@@ -1989,8 +1989,8 @@ if (!window.__schedulerContextMenuInit) {
   lastMouseX = 0; lastMouseY = 0;
   hoveredScheduleId = null;
   pasteHistory = [];
-  isDragging = false; dragGhost = null;
-  isSelectingDates = false; dateSelectStartEl = null;
+  isDragging = false, dragGhost = null;
+  isSelectingDates = false, dateSelectStartEl = null;
   window.__multiSelectDragActive = false;
 
   // ---------- UTILITY ----------
@@ -2590,7 +2590,8 @@ if (!window.__schedulerContextMenuInit) {
     dragGhost.style.pointerEvents = 'none';
     dragGhost.style.left = `${lastMouseX}px`;
     dragGhost.style.top = `${lastMouseY}px`;
-    dragGhost.style.transform = 'translate(10px, 12px)';
+    // center the ghost under the cursor instead of shifting by fixed pixels
+    dragGhost.style.transform = 'translate(-50%,-50%)';
     dragGhost.style.minWidth = '120px';
     dragGhost.innerHTML = `
       <svg class="drag-ghost-icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
