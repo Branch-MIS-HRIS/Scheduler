@@ -26,7 +26,11 @@ function escapeHtml(str) {
     .replace(/'/g, '&#39;');
 }
 
-const hasMultiSelectModifier = evt => !!(evt && (evt.ctrlKey || evt.metaKey));
+let multiSelectModifierActive = false;
+const hasMultiSelectModifier = evt => {
+  if (evt && (evt.ctrlKey || evt.metaKey)) return true;
+  return multiSelectModifierActive;
+};
             
             // --- STATE & CONFIG ---
             
@@ -214,6 +218,37 @@ function getGradientFromBaseColor(hex, type = 'work') {
             let isSelectingDates = false, dateSelectStartEl = null;
             let dragAnchorDate = null;
             let dragSelectionEvents = [];
+
+            if (!window.__multiSelectModifierStateInit) {
+              window.__multiSelectModifierStateInit = true;
+
+              const updateModifierState = active => {
+                multiSelectModifierActive = !!active;
+              };
+
+              const handleModifierKeyDown = e => {
+                if (!e) return;
+                if (e.metaKey || e.ctrlKey || e.key === 'Meta' || e.key === 'Control') {
+                  updateModifierState(true);
+                }
+              };
+
+              const handleModifierKeyUp = e => {
+                if (!e) return;
+                if (!e.metaKey && !e.ctrlKey) {
+                  updateModifierState(false);
+                }
+              };
+
+              document.addEventListener('keydown', handleModifierKeyDown, true);
+              document.addEventListener('keyup', handleModifierKeyUp, true);
+              window.addEventListener('blur', () => updateModifierState(false));
+              document.addEventListener('visibilitychange', () => {
+                if (document.visibilityState !== 'visible') {
+                  updateModifierState(false);
+                }
+              });
+            }
             
             // Configs
             const positionOptions = ['Branch Head', 'Site Supervisor', 'OIC', 'Mac Expert', 'Cashier'];
@@ -2107,7 +2142,10 @@ if (!window.__schedulerContextMenuInit) {
   document.addEventListener('contextmenu', e => {
     const pill = e.target.closest('.schedule-pill');
     const dateEl = e.target.closest('.fc-daygrid-day, .fc-timegrid-slot');
-    if (pill && !pill.classList.contains('selected')) toggleScheduleSelection(pill);
+    if (pill && !pill.classList.contains('selected')) {
+      const keepOthers = hasMultiSelectModifier(e);
+      toggleScheduleSelection(pill, keepOthers);
+    }
 
     e.preventDefault();
     removeContextMenu();
