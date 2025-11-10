@@ -1210,6 +1210,7 @@ calendar = new FullCalendar.Calendar(calendarEl, {
   /* ===========================
      STATS/EXPORT/RESET
   =========================== */
+
   function updateStats(conflictCount = null) {
     const allEvents = calendar ? calendar.getEvents() : [];
     const workCount = allEvents.filter(e => e.extendedProps.type === 'work').length;
@@ -1229,6 +1230,22 @@ calendar = new FullCalendar.Calendar(calendarEl, {
     const allEvents = calendar.getEvents();
     const daysOfWeek = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
     const wb = XLSX.utils.book_new();
+
+    // Helper: pixel-based auto-fit (works better than 'wch' across Excel versions)
+    function autoFitColumnsWpx(aoa, floorsPx, maxPx = 1200, padPx = 18) {
+      const widths = [];
+      for (let r = 0; r < aoa.length; r++) {
+        const row = aoa[r] || [];
+        for (let c = 0; c < row.length; c++) {
+          const v = row[c];
+          const s = (v === null || typeof v === 'undefined') ? '' : String(v);
+          const maxLineLen = s.split(/?/).reduce((m, seg) => Math.max(m, seg.length), 0);
+          const px = (maxLineLen * 8) + padPx; // ~8px per character baseline
+          widths[c] = Math.max(widths[c] || 0, px);
+        }
+      }
+      return widths.map((px, i) => ({ wpx: Math.min(maxPx, Math.max((floorsPx && floorsPx[i]) || 0, px || 0)) }));
+    }
 
     // --- Group events by employee number ---
     const byEmp = {};
@@ -1262,16 +1279,19 @@ calendar = new FullCalendar.Calendar(calendarEl, {
         const day = daysOfWeek[e.start.getDay()];
         workData.push([emp.name, emp.empNo, emp.position || 'N/A', e.startStr, shift, day]);
       });
-      // (no blank row between employees)
     });
     const wsWork = XLSX.utils.aoa_to_sheet(workData);
-    // Bold header if supported
     try {
+      // Bold header
       for (let c = 0; c < workData[0].length; c++) {
         const addr = XLSX.utils.encode_cell({ c, r: 0 });
         if (!wsWork[addr]) continue;
         wsWork[addr].s = Object.assign({}, wsWork[addr].s || {}, { font: { bold: true } });
       }
+      // Auto-size all columns (NAME & POSITION floors raised to avoid clipping)
+      wsWork['!cols'] = autoFitColumnsWpx(workData, [200, 130, 260, 140, 120, 140], 1000, 22);
+      // Add AutoFilter on header (optional quality-of-life)
+      wsWork['!autofilter'] = { ref: 'A1:F' + workData.length };
     } catch (_) {}
     XLSX.utils.book_append_sheet(wb, wsWork, 'Work Schedule');
 
@@ -1284,7 +1304,6 @@ calendar = new FullCalendar.Calendar(calendarEl, {
         const day = daysOfWeek[e.start.getDay()];
         restData.push([emp.name, emp.empNo, emp.position || 'N/A', e.startStr, day]);
       });
-      // (no blank row between employees)
     });
     const wsRest = XLSX.utils.aoa_to_sheet(restData);
     try {
@@ -1293,59 +1312,12 @@ calendar = new FullCalendar.Calendar(calendarEl, {
         if (!wsRest[addr]) continue;
         wsRest[addr].s = Object.assign({}, wsRest[addr].s || {}, { font: { bold: true } });
       }
+      wsRest['!cols'] = autoFitColumnsWpx(restData, [200, 130, 260, 140, 140], 1000, 22);
+      wsRest['!autofilter'] = { ref: 'A1:E' + restData.length };
     } catch (_) {}
     XLSX.utils.book_append_sheet(wb, wsRest, 'Rest Schedule');
 
-    // ===== Combined sheet: "WS & RD" =====
-    // 3 empty spacer columns between the two blocks
-    const spacer = ['', '', ''];
-    const consHeader = [
-      'NAME','EMPLOYEE NO.','WORK DATE','SHIFT CODE','DAY OF WEEK','POSITION',
-      ...spacer,
-      'NAME','EMPLOYEE NO.','REST DAY DATE','DAY OF WEEK','POSITION'
-    ];
-    const consolidated = [consHeader];
-
-    empOrder.forEach(empNo => {
-      const emp = getEmp(empNo);
-      const left = byEmp[empNo].work.slice().sort((a,b) => a.start - b.start).map(e => [
-        emp.name, emp.empNo, e.startStr, (e?.extendedProps?.shiftCode) || 'N/A',
-        daysOfWeek[e.start.getDay()], emp.position || 'N/A'
-      ]);
-      const right = byEmp[empNo].rest.slice().sort((a,b) => a.start - b.start).map(e => [
-        emp.name, emp.empNo, e.startStr,
-        daysOfWeek[e.start.getDay()], emp.position || 'N/A'
-      ]);
-      const maxLen = Math.max(left.length, right.length, 1);
-      for (let i = 0; i < maxLen; i++) {
-        const l = left[i]  || [emp.name, emp.empNo, '', '', '', emp.position || 'N/A'];
-        const r = right[i] || [emp.name, emp.empNo, '', '',        emp.position || 'N/A'];
-        consolidated.push([...l, ...spacer, ...r]);
-      }
-      // (no blank row between employees)
-    });
-
-    const wsCons = XLSX.utils.aoa_to_sheet(consolidated);
-    // Column widths to emphasize the 3-column gap
-    try {
-      const totalCols = consolidated[0].length;
-      wsCons['!cols'] = Array.from({length: totalCols}, (_, i) => {
-        // Make spacer columns narrow to look like a gap
-        if (i >= 6 && i <= 8) return { wch: 3 };
-        return { wch: 18 };
-      });
-    } catch (_) {}
-    // Bold header if supported
-    try {
-      for (let c = 0; c < consHeader.length; c++) {
-        const addr = XLSX.utils.encode_cell({ c, r: 0 });
-        if (!wsCons[addr]) continue;
-        wsCons[addr].s = Object.assign({}, wsCons[addr].s || {}, { font: { bold: true } });
-      }
-    } catch (_) {}
-    XLSX.utils.book_append_sheet(wb, wsCons, 'WS & RD');
-
-    // ===== Conflict Summary (unchanged grouping) =====
+    // ===== Conflict Summary =====
     if (conflicts && conflicts.length > 0) {
       const conflictData = [['EMPLOYEE NAME','EMPLOYEE NO.','POLICY VIOLATED','DATES INVOLVED']];
       const map = {};
@@ -1365,10 +1337,13 @@ calendar = new FullCalendar.Calendar(calendarEl, {
           if (!wsCon[addr]) continue;
           wsCon[addr].s = Object.assign({}, wsCon[addr].s || {}, { font: { bold: true } });
         }
+        wsCon['!cols'] = autoFitColumnsWpx(conflictData, [240, 130, 300, 340], 1100, 22);
+        wsCon['!autofilter'] = { ref: 'A1:D' + conflictData.length };
       } catch (_) {}
       XLSX.utils.book_append_sheet(wb, wsCon, 'Conflict Summary');
     }
 
+    // Write the file and close
     XLSX.writeFile(wb, 'Branch_Schedule_Report.xlsx');
     if (typeof closeModal === 'function' && typeof exportModal !== 'undefined' && exportModal) closeModal(exportModal);
     if (typeof showToast === 'function') showToast('Excel report downloaded successfully!', 'success');
