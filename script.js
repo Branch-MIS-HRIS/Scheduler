@@ -89,6 +89,38 @@ function escapeSelector(value) {
   return str.replace(/"/g, '\\"');
 }
 
+function findExistingShiftForEmployee(empNo, dateStr, options = {}) {
+  if (!calendar || typeof calendar.getEvents !== 'function') return null;
+  if (empNo == null || !dateStr) return null;
+
+  const { exclude = [] } = options;
+  const excludeObjects = new Set();
+  const excludeIds = new Set();
+
+  exclude.forEach(item => {
+    if (!item) return;
+    if (typeof item === 'string' || typeof item === 'number') {
+      excludeIds.add(String(item));
+    } else {
+      excludeObjects.add(item);
+      const extId = item.extendedProps && item.extendedProps.id != null ? item.extendedProps.id : null;
+      const plainId = item.id != null ? item.id : null;
+      if (extId != null) excludeIds.add(String(extId));
+      if (plainId != null) excludeIds.add(String(plainId));
+    }
+  });
+
+  const normalizedEmp = String(empNo);
+
+  return calendar.getEvents().find(ev => {
+    if (!ev) return false;
+    if (excludeObjects.has(ev)) return false;
+    const eventId = ev.extendedProps?.id ?? ev.id;
+    if (eventId != null && excludeIds.has(String(eventId))) return false;
+    return String(ev.extendedProps?.empNo) === normalizedEmp && ev.startStr === dateStr;
+  }) || null;
+}
+
 function updateEmployeeColorStyles(empNo) {
   if (!empNo) return null;
   const color = ensureEmployeeColor(empNo);
@@ -745,16 +777,11 @@ eventReceive: function(info) {
 
   // ✅ Ensure unique ID
   // ✅ Duplicate check
-  const allEvents = calendar.getEvents();
-  const isDuplicate = allEvents.find(e => 
-    e.extendedProps.id !== newEvent.extendedProps.id &&
-    e.startStr === dateStr &&
-    e.extendedProps.empNo === droppedEmpNo &&
-    e.extendedProps.type === type
-  );
+  const conflict = findExistingShiftForEmployee(droppedEmpNo, dateStr, { exclude: [newEvent] });
 
-  if (isDuplicate) {
-    showToast(`Duplicate entry blocked: ${employees[droppedEmpNo] ? employees[droppedEmpNo].name : droppedEmpNo} already has a '${type}' day on this date.`, 'error');
+  if (conflict) {
+    const employeeName = employees[droppedEmpNo] ? employees[droppedEmpNo].name : droppedEmpNo;
+    showToast(`Duplicate entry blocked: ${employeeName} already has a shift on this date.`, 'error');
     newEvent.remove();
     return;
   }
@@ -786,6 +813,16 @@ eventReceive: function(info) {
       if (multiDragActive || (selectedSchedules && selectedSchedules.size > 1 && selectedSchedules.has(String(eventId)))) {
         info.revert();
         return;
+      }
+      const movedEmpNo = info.event.extendedProps?.empNo;
+      if (movedEmpNo) {
+        const conflict = findExistingShiftForEmployee(movedEmpNo, info.event.startStr, { exclude: [info.event] });
+        if (conflict) {
+          const employeeName = employees[movedEmpNo] ? employees[movedEmpNo].name : movedEmpNo;
+          showToast(`Move blocked: ${employeeName} already has a shift on this date.`, 'error');
+          info.revert();
+          return;
+        }
       }
       runConflictDetection();
       updateStats();
@@ -2206,12 +2243,8 @@ if (!window.__schedulerContextMenuInit) {
         const newDate = new Date(src.date);
         newDate.setDate(newDate.getDate() + offsetDays);
         const newDateStr = newDate.toISOString().split('T')[0];
-        const exists = calendar.getEvents().some(e =>
-          e.extendedProps.empNo === src.empNo &&
-          (!src.type || e.extendedProps.type === src.type) &&
-          e.startStr === newDateStr
-        );
-        if (exists) { skipped++; return; }
+        const conflict = findExistingShiftForEmployee(src.empNo, newDateStr);
+        if (conflict) { skipped++; return; }
         const newId = crypto?.randomUUID?.() ?? `sched-${Date.now()}-${Math.random().toString(36).slice(2,8)}`;
         const pasteType = src.type || 'work';
         const color = ensureEmployeeColor(src.empNo);
@@ -2520,21 +2553,16 @@ if (!window.__schedulerContextMenuInit) {
     });
 
     const eventsToIgnore = new Set(dragSelectionEvents);
+    const ignoredEvents = Array.from(eventsToIgnore);
     const hasConflict = plannedMoves.some(({ event, newDateStr }) => {
       const empNo = event.extendedProps?.empNo;
-      const type = event.extendedProps?.type;
-      return calendar.getEvents().some(other => {
-        if (eventsToIgnore.has(other)) return false;
-        return (
-          String(other.extendedProps?.empNo) === String(empNo) &&
-          String(other.extendedProps?.type) === String(type) &&
-          other.startStr === newDateStr
-        );
-      });
+      if (!empNo) return false;
+      const conflict = findExistingShiftForEmployee(empNo, newDateStr, { exclude: [...ignoredEvents, event] });
+      return !!conflict;
     });
 
     if (hasConflict) {
-      showToastWrapper('Move cancelled: a selected employee already has that schedule.', 'error');
+      showToastWrapper('Move cancelled: a selected employee already has a shift on that date.', 'error');
       return false;
     }
 
