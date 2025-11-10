@@ -28,7 +28,11 @@ function escapeHtml(str) {
 
 let multiSelectModifierActive = false;
 const hasMultiSelectModifier = evt => {
-  if (evt && (evt.ctrlKey || evt.metaKey)) return true;
+  if (evt && (typeof evt.ctrlKey === 'boolean' || typeof evt.metaKey === 'boolean')) {
+    const active = !!(evt.ctrlKey || evt.metaKey);
+    multiSelectModifierActive = active;
+    return active;
+  }
   return multiSelectModifierActive;
 };
             
