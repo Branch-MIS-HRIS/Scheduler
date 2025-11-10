@@ -992,17 +992,22 @@ try {
   draggable = new FullCalendar.Draggable(draggableCardsContainer, {
     itemSelector: '.fc-event-pill',
     eventData: function (eventEl) {
-      if (eventEl._fcEventData) return eventEl._fcEventData;
       try {
-        const parsed = JSON.parse(eventEl.getAttribute('data-event'));
+        if (!eventEl._fcEventDataTemplate) {
+          const raw = eventEl.getAttribute('data-event');
+          eventEl._fcEventDataTemplate = raw ? JSON.parse(raw) : null;
+        }
+        const template = eventEl._fcEventDataTemplate;
+        if (!template) return null;
+
+        // Always clone the template so each drop receives an isolated object
+        const parsed = JSON.parse(JSON.stringify(template));
         const t = parsed.extendedProps && parsed.extendedProps.type ? parsed.extendedProps.type : '';
         const classSet = new Set(parsed.classNames || []);
         classSet.add('fc-event-pill');
         if (t === 'rest') classSet.add('fc-event-rest');
         else classSet.add('fc-event-work');
         parsed.classNames = Array.from(classSet);
-        // Let CSS handle background color per type
-        eventEl._fcEventData = parsed;
         return parsed;
       } catch (err) {
         console.error('Invalid event data on draggable element', err);
@@ -1343,6 +1348,9 @@ if (shiftSearchInput && shiftPresetSelect) {
                 } catch (e) {}
                 decorateEventLater(currentDroppingEvent);
                 refreshEventTooltip(currentDroppingEvent);
+                if (calendar && typeof calendar.rerenderEvents === 'function') {
+                  calendar.rerenderEvents();
+                }
                 runConflictDetection();
                 updateStats();
                 saveToLocalStorage();
