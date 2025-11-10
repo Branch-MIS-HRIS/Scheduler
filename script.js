@@ -27,6 +27,13 @@ document.addEventListener('DOMContentLoaded', function () {
       .replace(/'/g, '&#39;');
   }
 
+  // Pointer → date helper (robust to transforms/zoom)
+function getDateUnderPointer() {
+  const el = document.elementFromPoint(lastMouseX, lastMouseY);
+  const cell = el && el.closest ? el.closest('.fc-daygrid-day, .fc-timegrid-slot') : null;
+  return cell ? cell.getAttribute('data-date') : null;
+}
+
   let multiSelectModifierActive = false;
   const hasMultiSelectModifier = evt => {
     if (evt && (typeof evt.ctrlKey === 'boolean' || typeof evt.metaKey === 'boolean')) {
@@ -582,7 +589,16 @@ document.addEventListener('DOMContentLoaded', function () {
 
         const type = newEvent.extendedProps?.type || 'work';
         const empNo = newEvent.extendedProps?.empNo || newEvent.extendedProps?.employeeNo;
-        const dateStr = newEvent.startStr;
+        let dateStr = newEvent.startStr;   // <-- make it let so we can update after pointer-fix
+        // ---- FORCE DROP TO EXACT DATE UNDER THE POINTER ----
+(function forceDropToPointerDate() {
+  const pointedDate = (typeof getDateUnderPointer === 'function') ? getDateUnderPointer() : null;
+  if (pointedDate && pointedDate !== newEvent.startStr) {
+    newEvent.setStart(pointedDate);
+    try { newEvent.setEnd(pointedDate); } catch (e) {}
+    dateStr = newEvent.startStr; // keep duplicate checks in sync with the corrected date
+  }
+})();
         if (!empNo) { console.warn('eventReceive: missing empNo'); return; }
 
         // Style

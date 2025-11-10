@@ -1022,3 +1022,9 @@ body.multi-dragging { cursor: grabbing; }
     animation: none !important;
   }
 }
+/* Hide FullCalendar's default drag mirror (we show our own ghost) */
+.fc-mirror { opacity: 0 !important; visibility: hidden !important; }
+
+/* While dragging, neutralize transforms that can skew hit-testing */
+.no-transform-during-drag *:not(.drag-ghost) { transform: none !important; }
+
