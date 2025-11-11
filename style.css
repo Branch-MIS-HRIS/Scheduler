@@ -1088,10 +1088,24 @@ body.multi-dragging { cursor: grabbing; }
   margin-right: -6px;
   overscroll-behavior: contain;
   -webkit-overflow-scrolling: touch;
+  touch-action: pan-y;
+}
+
+.executive-sidebar .draggable-scroll.is-dragging {
+  touch-action: none;
 }
 
 .executive-sidebar .draggable-scroll > * {
   flex: 0 0 auto;
+}
+
+.executive-sidebar .draggable-scroll .fc-event-pill {
+  touch-action: pan-y;
+}
+
+.executive-sidebar .draggable-scroll.is-dragging .fc-event-pill {
+  touch-action: none;
+  cursor: grabbing;
 }
 
 .executive-sidebar .draggable-scroll::-webkit-scrollbar {
@@ -1103,8 +1117,6 @@ body.multi-dragging { cursor: grabbing; }
 }
 
 #draggable-cards-container .fc-event-pill {
-  /* allow vertical scroll gestures even on touch while element is draggable */
-  touch-action: pan-y;
   cursor: grab;
 }
 #draggable-cards-container .fc-event-pill:active {
@@ -1114,7 +1126,6 @@ body.multi-dragging { cursor: grabbing; }
 #draggable-cards-container .fc-event-pill,
 #draggable-cards-container .schedule-pill {
   cursor: grab;
-  touch-action: pan-y;     /* allow vertical scroll gestures */
   -webkit-user-drag: none;
   user-select: none;
 }
