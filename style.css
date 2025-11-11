@@ -737,6 +737,12 @@ tbody tr td:first-child {
   transform: none !important;
 }
 
+/* (NEW) Avoid hover/tooltip interference while dragging a calendar event */
+.fc-event.fc-dragging,
+.fc-event.fc-dragging * {
+  pointer-events: none !important;
+}
+
 /* Multi-select highlight */
 .schedule-pill.selected, .fc-event-pill.selected {
   outline: 2px solid #2563eb; /* Sky-600 ring */
@@ -860,6 +866,12 @@ body.multi-dragging { cursor: grabbing; }
 .drag-ghost-hint {
   color: var(--muted);
   font-weight: 500;
+}
+
+/* (NEW) While dragging selections, stop accidental text selection */
+.no-select, .no-select * {
+  user-select: none !important;
+  -webkit-user-select: none !important;
 }
 
 /* Selected target dates highlight */
@@ -1031,6 +1043,21 @@ body.multi-dragging { cursor: grabbing; }
 }
 
 /* Limit transform neutralization to the calendar content only */
+/* (NEW) Neutralize transforms only while dragging to keep cursor/pill aligned */
+.no-transform-during-drag #app-wrapper,
+.no-transform-during-drag #calendar,
+.no-transform-during-drag .fc,
+.no-transform-during-drag .fc-view-harness,
+.no-transform-during-drag .fc-view-harness-active,
+.no-transform-during-drag .fc-scroller,
+.no-transform-during-drag .executive-sidebar,
+.no-transform-during-drag .draggable-scroll {
+  transform: none !important;
+  filter: none !important;
+  perspective: none !important;
+  backface-visibility: visible !important;
+}
+
 /* --- Sidebar Scroll Enhancements --- */
 .executive-sidebar {
   display: flex;
@@ -1134,5 +1161,3 @@ body.multi-dragging { cursor: grabbing; }
 #draggable-cards-container .schedule-pill:active {
   cursor: grabbing;
 }
-
-
