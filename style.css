@@ -1071,33 +1071,31 @@ body.multi-dragging { cursor: grabbing; }
 }
 
 /* Draggable cards section (scrolls separately) */
-.executive-sidebar > .data-surface.subtle-surface {
+.executive-sidebar .draggable-surface {
   flex: 1;
   display: flex;
   flex-direction: column;
   min-height: 0;
-  /* allow the child (#draggable-cards-container) to handle scrolling itself */
   overflow: visible;
 }
 
-#draggable-cards-container {
+.executive-sidebar .draggable-scroll {
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
   overflow-x: hidden;
   padding-right: 6px;
-}
-
-#draggable-cards-container::-webkit-scrollbar {
-  width: 6px;
-}
-#draggable-cards-container::-webkit-scrollbar-thumb {
-  background: rgba(148,163,184,0.35);
-  border-radius: 999px;
-}
-/* Sidebar drag-scroll quality of life */
-#draggable-cards-container {
+  margin-right: -6px;
   overscroll-behavior: contain;
   -webkit-overflow-scrolling: touch;
+}
+
+.executive-sidebar .draggable-scroll::-webkit-scrollbar {
+  width: 6px;
+}
+.executive-sidebar .draggable-scroll::-webkit-scrollbar-thumb {
+  background: rgba(148,163,184,0.35);
+  border-radius: 999px;
 }
 
 #draggable-cards-container .fc-event-pill {
