@@ -949,10 +949,10 @@ if (conflict) {
             <div class="flex space-x-2">
               <div class="fc-event-pill fc-event-work px-3 py-1 text-xs font-medium rounded-full cursor-pointer select-none shadow-sm"
                    data-event='${JSON.stringify(workEventData)}'
-                   style="background:${workGradient}; color:#fff; border:none;">🟦 Work</div>
+                   style="background:${workGradient}; color:#fff; border:none;">Work</div>
               <div class="fc-event-pill fc-event-rest px-3 py-1 text-xs font-medium rounded-full cursor-pointer select-none shadow-sm"
                    data-event='${JSON.stringify(restEventData)}'
-                   style="background:${restGradient}; color:${color}; border:2px solid ${color};">🔴 Rest</div>
+                   style="background:${restGradient}; color:${color}; border:2px solid ${color};">Rest</div>
             </div>
           </div>
         </div>`;
