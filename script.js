@@ -1305,6 +1305,8 @@ function finalizeSidebarEventDrop(newEvent) {
       else exportConflictWarning.classList.add('hidden');
     }
     exportModal.classList.remove('hidden');
+    const mo = document.getElementById('export-month');
+if (mo) mo.focus();
   }
 
   function closeModal(modalEl) { if (!modalEl) return; modalEl.classList.add('hidden'); }
@@ -1566,11 +1568,31 @@ function finalizeSidebarEventDrop(newEvent) {
       XLSX.utils.book_append_sheet(wb, wsCon, 'Conflict Summary');
     }
 
-    // Write the file and close
-    XLSX.writeFile(wb, 'Branch_Schedule_Report.xlsx');
-    if (typeof closeModal === 'function' && typeof exportModal !== 'undefined' && exportModal) closeModal(exportModal);
-    if (typeof showToast === 'function') showToast('Excel report downloaded successfully!', 'success');
-  }
+// === Build filename & save NOW (single click) ===
+const bcEl = document.getElementById('export-branch-code');
+const bnEl = document.getElementById('export-branch-name');
+const moEl = document.getElementById('export-month');
+
+const bc = bcEl?.value?.trim() || '';
+const bn = bnEl?.value?.trim() || '';
+const mo = moEl?.value?.trim() || '';
+
+// Basic validation (no auto-format)
+const missing = [];
+markInvalid(bcEl, !bc); if (!bc) missing.push('Branch code');
+markInvalid(bnEl, !bn); if (!bn) missing.push('Branch name');
+markInvalid(moEl, !mo); if (!mo) missing.push('Month');
+
+if (missing.length) {
+  toastOrAlert(`Please input your ${missing.join(', ')} before downloading.`, 'error');
+  (bc ? (bn ? moEl : bnEl) : bcEl)?.focus();
+  return;
+}
+
+const finalName = buildExportFilename(bc, bn, mo);
+
+// Save the workbook created earlier in this same function
+XLSX.writeFile(wb, finalName);
 
   function resetAll() {
     if (!deleteModal || !deleteModalSummary || !confirmDeleteBtn) return;
@@ -2284,4 +2306,30 @@ function finalizeSidebarEventDrop(newEvent) {
   }
 
   startScheduler();
+}
+
+// === Export helpers ===
+function sanitizePart(s) {
+  return String(s)
+    .replace(/[\\\/:*?"<>|]+/g, '') // strip illegal filename chars
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function buildExportFilename(code, name, month) {
+  const base = `${sanitizePart(code)}_${sanitizePart(name)}_${sanitizePart(month)}_WS_RD_Schedule`;
+  // use underscores per spec; keep spaces out for safety:
+  return base.replace(/\s/g, '-') + '.xlsx';
+}
+
+// Tiny toast fallback (in case showToast isn't defined)
+function toastOrAlert(msg, type = 'error') {
+  if (typeof showToast === 'function') return showToast(msg, type);
+  alert(msg);
+}
+
+function markInvalid(el, on) {
+  if (!el) return;
+  el.classList.toggle('validation-error', !!on);
+}
 });
