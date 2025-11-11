@@ -315,6 +315,10 @@ function getDateUnderPointer() {
   let copiedEmployeeNo = null;
   let copiedEmployeeData = null;
   let calendar, draggable;
+  let __sidebarDragListenersWired = false;
+  let __calendarDragLiftWired = false;
+  let __bodyDragGuardsWired = false;
+  let __isSidebarDragging = false;
   let currentDroppingEvent = null;
   let currentDeletingEvent = null;
   let isEditingExistingEvent = false;
