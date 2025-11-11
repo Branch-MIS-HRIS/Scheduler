@@ -1182,3 +1182,9 @@ body.multi-dragging { cursor: grabbing; }
 #draggable-cards-container .schedule-pill:active {
   cursor: grabbing;
 }
+/* Prevent pointer/mirror offset: kill transforms while dragging */
+.no-transform-during-drag,
+.no-transform-during-drag * {
+  transform: none !important;
+}
+

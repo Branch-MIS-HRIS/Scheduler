@@ -860,16 +860,19 @@ function initializeDraggable() {
   const sidebarPills = draggableCardsContainer.querySelectorAll('.fc-event-pill');
   sidebarPills.forEach(card => wireSidebarCardDrag(card));
 
-  // Cosmetic lift while dragging inside the calendar — wire once
-  if (calendar && typeof calendar.on === 'function' && !__calendarDragLiftWired) {
-    calendar.on('eventDragStart', function (info) {
-      info.el.style.transform = 'translateY(-4px)';
-    });
-    calendar.on('eventDragStop', function (info) {
-      info.el.style.transform = 'translateY(0)';
-    });
-    __calendarDragLiftWired = true;
-  }
+// Cosmetic lift while dragging inside the calendar — wire once
+if (calendar && typeof calendar.on === 'function' && !__calendarDragLiftWired) {
+  calendar.on('eventDragStart', function () {
+    // lock transforms to avoid cursor/mirror offset
+    document.body.classList.add('no-transform-during-drag');
+  });
+
+  calendar.on('eventDragStop', function () {
+    document.body.classList.remove('no-transform-during-drag');
+  });
+
+  __calendarDragLiftWired = true;
+}
 
   // Guard against body transforms during external HTML5 drag — wire once
   if (!__bodyDragGuardsWired) {
