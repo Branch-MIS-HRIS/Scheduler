@@ -1126,7 +1126,6 @@ body.multi-dragging { cursor: grabbing; }
 #draggable-cards-container .fc-event-pill,
 #draggable-cards-container .schedule-pill {
   cursor: grab;
-  -webkit-user-drag: none;
   user-select: none;
 }
 

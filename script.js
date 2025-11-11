@@ -314,11 +314,12 @@ function getDateUnderPointer() {
   let copiedEmployeeSchedule = null;
   let copiedEmployeeNo = null;
   let copiedEmployeeData = null;
-  let calendar, draggable;
+  let calendar;
   let __sidebarDragListenersWired = false;
   let __calendarDragLiftWired = false;
   let __bodyDragGuardsWired = false;
   let __isSidebarDragging = false;
+  const wiredSidebarCards = new WeakSet();
   let currentDroppingEvent = null;
   let currentDeletingEvent = null;
   let isEditingExistingEvent = false;
@@ -585,7 +586,6 @@ function initializeCalendar() {
         } catch (e) {}
 
         const newEvent = info.event;
-        // FIX: isolate props & ensure a unique ID
         try {
           const nowId = `evt_${Date.now()}_${Math.random().toString(36).slice(2,6)}`;
           const ext = JSON.parse(JSON.stringify(newEvent.extendedProps || {}));
@@ -594,75 +594,35 @@ function initializeCalendar() {
             newEvent.setExtendedProp('id', nowId);
             try { newEvent.setProp('id', nowId); } catch (e) {}
           }
-          // keep employee number for schedule generation
           if (ext.empNo == null && newEvent.extendedProps?.empNo != null) {
             newEvent.setExtendedProp('empNo', String(newEvent.extendedProps.empNo));
           }
           if (ext.employeeNo == null && newEvent.extendedProps?.employeeNo != null) {
             newEvent.setExtendedProp('employeeNo', String(newEvent.extendedProps.employeeNo));
           }
-          // ensure type
           const safeType = ext.type || newEvent.extendedProps?.type || 'work';
           newEvent.setExtendedProp('type', safeType);
         } catch (e) { console.warn('eventReceive: cloning props failed', e); }
 
-        const type = newEvent.extendedProps?.type || 'work';
-        const empNo = newEvent.extendedProps?.empNo || newEvent.extendedProps?.employeeNo;
-        let dateStr = newEvent.startStr;   // <-- make it let so we can update after pointer-fix
-        // ---- FORCE DROP TO EXACT DATE UNDER THE POINTER ----
-(function forceDropToPointerDate() {
-  const pointedDate = (typeof getDateUnderPointer === 'function') ? getDateUnderPointer() : null;
-  if (pointedDate && pointedDate !== newEvent.startStr) {
-    newEvent.setStart(pointedDate);
-    try { newEvent.setEnd(pointedDate); } catch (e) {}
-    dateStr = newEvent.startStr; // keep duplicate checks in sync with the corrected date
-  }
-})();
-        if (!empNo) { console.warn('eventReceive: missing empNo'); return; }
+        finalizeSidebarEventDrop(newEvent);
+      },
 
-        // Style
-        const color = ensureEmployeeColor(empNo);
-        const grad = getGradientFromBaseColor(color, type);
-        const classNames = ['fc-event-pill', `fc-event-${type}`];
-        const forceStyle = (type === 'rest')
-          ? { background: grad, backgroundImage: 'none', color, border: `2px solid ${color}` }
-          : { background: grad, backgroundImage: 'none', color: '#fff', border: 'none' };
+      drop: function(info) {
+        const payload = normalizeSidebarPayload(parseSidebarDragPayload(info.draggedEl, info.jsEvent?.dataTransfer));
+        if (!payload || !calendar) return;
 
-        try {
-          newEvent.setProp('classNames', classNames);
-          newEvent.setExtendedProp('forceStyle', forceStyle);
-          newEvent.setProp('backgroundColor', '');
-          newEvent.setProp('borderColor', type === 'rest' ? color : 'transparent');
-          newEvent.setProp('textColor', type === 'rest' ? color : '#fff');
-        } catch (e) {}
+        const eventProps = {
+          title: payload.title || (info.draggedEl ? info.draggedEl.textContent?.trim() : ''),
+          start: info.dateStr || (info.date ? info.date.toISOString() : undefined),
+          allDay: !!info.allDay,
+          classNames: payload.classNames,
+          extendedProps: payload.extendedProps
+        };
+        if (payload.id) eventProps.id = payload.id;
 
-        // FIX: duplicate check only for work
-        // Block any duplicate schedule (work ↔ rest cross-type aware)
-const conflict = findExistingShiftForEmployee(empNo, dateStr, { exclude: [newEvent] });
-if (conflict) {
-  const name = employees[empNo]?.name || empNo;
-  const existType = (conflict.extendedProps && conflict.extendedProps.type === 'rest') ? 'rest day' : 'work shift';
-  const newType = (type === 'rest') ? 'rest day' : 'work shift';
-  showToast(`Duplicate entry blocked: ${name} already has a ${existType} on this date. Cannot add another ${newType}.`, 'error');
-  newEvent.remove();
-  return;
-}
-
-        // Branch logic
-        if (type === 'work') {
-          currentDroppingEvent = newEvent;
-          openShiftModal();
-        } else {
-          runConflictDetection();
-          updateStats();
-          saveToLocalStorage();
-        }
-
-        // FIX: force immediate DOM update (prevents first-drop "N/A")
-        try { newEvent.setProp('title', newEvent.title); } catch (e) {}
-
-        // apply decorations
-        try { decorateEventLater(newEvent); } catch (e) {}
+        const newEvent = calendar.addEvent(eventProps);
+        if (!newEvent) return;
+        finalizeSidebarEventDrop(newEvent);
       },
 
       /* Drag inside calendar */
@@ -779,6 +739,16 @@ if (conflict) {
     calendar.on('eventDragStop', function(){ document.body.classList.remove('no-transform-during-drag'); });
 
     calendar.render();
+    try { window.calendar = calendar; } catch (e) {}
+  }
+
+  if (calendarEl && !calendarEl.__sidebarDragOverBound) {
+    calendarEl.addEventListener('dragover', (e) => {
+      if (__isSidebarDragging) {
+        e.preventDefault();
+      }
+    });
+    calendarEl.__sidebarDragOverBound = true;
   }
 
 /* ===========================
@@ -789,20 +759,8 @@ function initializeDraggable() {
 
   draggableCardsContainer.classList.remove('is-dragging');
 
-  // Clean up an existing Draggable instance
-  if (draggable) { try { draggable.destroy(); } catch (e) {} }
-
-  // Wire sidebar drag/scroll listeners ONCE (not inside eventData)
+  // Wire sidebar drag/scroll listeners ONCE (not inside per-card wiring)
   if (!__sidebarDragListenersWired) {
-    draggableCardsContainer.addEventListener('dragstart', () => {
-      __isSidebarDragging = true;
-      draggableCardsContainer.classList.add('is-dragging');
-    }, { capture: true });
-    draggableCardsContainer.addEventListener('dragend',   () => {
-      __isSidebarDragging = false;
-      draggableCardsContainer.classList.remove('is-dragging');
-    }, { capture: true });
-
     // When dragging a pill from the sidebar, stop wheel/touchmove bubbling so the calendar doesn't hijack scroll
     draggableCardsContainer.addEventListener('wheel', (e) => {
       if (__isSidebarDragging) e.stopPropagation();
@@ -815,46 +773,9 @@ function initializeDraggable() {
     __sidebarDragListenersWired = true;
   }
 
-  // Create a fresh Draggable (listeners above are now outside eventData)
-  try {
-    draggable = new FullCalendar.Draggable(draggableCardsContainer, {
-      itemSelector: '.fc-event-pill',
-      eventData(eventEl) {
-        try {
-          // Cache + deep clone template payload
-          if (!eventEl._fcEventDataTemplate) {
-            const raw = eventEl.getAttribute('data-event');
-            eventEl._fcEventDataTemplate = raw ? JSON.parse(raw) : null;
-          }
-          const template = eventEl._fcEventDataTemplate;
-          if (!template) return null;
-
-          const parsed = JSON.parse(JSON.stringify(template));
-
-          // Unique id per drop to prevent collisions
-          const uid = `evt_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
-          parsed.id = parsed.id || uid;
-          if (parsed.extendedProps) parsed.extendedProps.id = parsed.extendedProps.id || uid;
-
-          // Ensure consistent pill classes based on type
-          const t = parsed.extendedProps?.type || 'work';
-          const classSet = new Set(parsed.classNames || []);
-          classSet.add('fc-event-pill');
-          classSet.add(t === 'rest' ? 'fc-event-rest' : 'fc-event-work');
-          parsed.classNames = Array.from(classSet);
-
-          return parsed;
-        } catch (err) {
-          console.error('Invalid event data on draggable element', err);
-          return null;
-        }
-      },
-      // Keep calendar from auto-scrolling the page while dragging from the sidebar
-      dragScroll: false
-    });
-  } catch (err) {
-    console.warn('initializeDraggable error', err);
-  }
+  // Wire each pill for native HTML5 drag only once
+  const sidebarPills = draggableCardsContainer.querySelectorAll('.fc-event-pill');
+  sidebarPills.forEach(card => wireSidebarCardDrag(card));
 
   // Cosmetic lift while dragging inside the calendar — wire once
   if (calendar && typeof calendar.on === 'function' && !__calendarDragLiftWired) {
@@ -877,6 +798,164 @@ function initializeDraggable() {
     });
     __bodyDragGuardsWired = true;
   }
+}
+
+function wireSidebarCardDrag(card) {
+  if (!card || wiredSidebarCards.has(card)) return;
+  card.setAttribute('draggable', 'true');
+  card.addEventListener('dragstart', handleSidebarCardDragStart);
+  card.addEventListener('dragend', handleSidebarCardDragEnd);
+  wiredSidebarCards.add(card);
+}
+
+function prepareSidebarEventPayload(eventEl) {
+  if (!eventEl) return null;
+  try {
+    if (!eventEl._fcEventDataTemplate) {
+      const raw = eventEl.getAttribute('data-event');
+      eventEl._fcEventDataTemplate = raw ? JSON.parse(raw) : null;
+    }
+    const template = eventEl._fcEventDataTemplate;
+    if (!template) return null;
+
+    const parsed = JSON.parse(JSON.stringify(template));
+    const uid = `evt_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+    parsed.id = parsed.id || uid;
+    parsed.extendedProps = parsed.extendedProps || {};
+    parsed.extendedProps.id = parsed.extendedProps.id || uid;
+
+    const type = parsed.extendedProps?.type === 'rest' ? 'rest' : 'work';
+    parsed.extendedProps.type = type;
+    const classSet = new Set(parsed.classNames || []);
+    classSet.add('fc-event-pill');
+    classSet.add(type === 'rest' ? 'fc-event-rest' : 'fc-event-work');
+    parsed.classNames = Array.from(classSet);
+
+    return parsed;
+  } catch (err) {
+    console.error('Invalid event data on draggable element', err);
+    return null;
+  }
+}
+
+function handleSidebarCardDragStart(ev) {
+  const card = ev.currentTarget;
+  const payload = prepareSidebarEventPayload(card);
+  if (!payload) {
+    ev.preventDefault();
+    return;
+  }
+
+  const payloadJson = JSON.stringify(payload);
+  card.setAttribute('data-drag-payload', payloadJson);
+  __isSidebarDragging = true;
+  draggableCardsContainer?.classList.add('is-dragging');
+  document.body.classList.add('no-transform-during-drag');
+
+  if (ev.dataTransfer) {
+    try { ev.dataTransfer.effectAllowed = 'copyMove'; } catch (e) {}
+    try { ev.dataTransfer.setData('application/json', payloadJson); } catch (e) {}
+    try { ev.dataTransfer.setData('text/plain', payloadJson); } catch (e) {}
+  }
+}
+
+function handleSidebarCardDragEnd(ev) {
+  const card = ev.currentTarget;
+  __isSidebarDragging = false;
+  draggableCardsContainer?.classList.remove('is-dragging');
+  document.body.classList.remove('no-transform-during-drag');
+  if (card) card.removeAttribute('data-drag-payload');
+}
+
+function parseSidebarDragPayload(draggedEl, dataTransfer) {
+  let raw = draggedEl?.getAttribute('data-drag-payload');
+  if (!raw) raw = draggedEl?.getAttribute('data-event');
+  if (!raw && dataTransfer) {
+    raw = dataTransfer.getData('application/json') || dataTransfer.getData('text/plain') || dataTransfer.getData('text');
+  }
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw);
+  } catch (err) {
+    console.warn('Unable to parse sidebar drag payload', err);
+    return null;
+  }
+}
+
+function normalizeSidebarPayload(payload) {
+  if (!payload) return null;
+  const clone = JSON.parse(JSON.stringify(payload));
+  clone.extendedProps = clone.extendedProps || {};
+  const type = clone.extendedProps?.type === 'rest' ? 'rest' : 'work';
+  clone.extendedProps.type = type;
+  const classSet = new Set(clone.classNames || []);
+  classSet.add('fc-event-pill');
+  classSet.add(type === 'rest' ? 'fc-event-rest' : 'fc-event-work');
+  clone.classNames = Array.from(classSet);
+  if (!clone.id) {
+    const uid = `evt_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+    clone.id = uid;
+    clone.extendedProps.id = clone.extendedProps.id || uid;
+  } else if (!clone.extendedProps.id) {
+    clone.extendedProps.id = clone.id;
+  }
+  return clone;
+}
+
+function finalizeSidebarEventDrop(newEvent) {
+  if (!newEvent) return;
+
+  let dateStr = newEvent.startStr;
+
+  (function forceDropToPointerDate() {
+    const pointedDate = (typeof getDateUnderPointer === 'function') ? getDateUnderPointer() : null;
+    if (pointedDate && pointedDate !== newEvent.startStr) {
+      newEvent.setStart(pointedDate);
+      try { newEvent.setEnd(pointedDate); } catch (e) {}
+      dateStr = newEvent.startStr;
+    }
+  })();
+
+  const type = newEvent.extendedProps?.type || 'work';
+  const empNo = newEvent.extendedProps?.empNo || newEvent.extendedProps?.employeeNo;
+  if (!empNo) { console.warn('eventReceive: missing empNo'); return; }
+
+  const color = ensureEmployeeColor(empNo);
+  const grad = getGradientFromBaseColor(color, type);
+  const classNames = ['fc-event-pill', `fc-event-${type}`];
+  const forceStyle = (type === 'rest')
+    ? { background: grad, backgroundImage: 'none', color, border: `2px solid ${color}` }
+    : { background: grad, backgroundImage: 'none', color: '#fff', border: 'none' };
+
+  try {
+    newEvent.setProp('classNames', classNames);
+    newEvent.setExtendedProp('forceStyle', forceStyle);
+    newEvent.setProp('backgroundColor', '');
+    newEvent.setProp('borderColor', type === 'rest' ? color : 'transparent');
+    newEvent.setProp('textColor', type === 'rest' ? color : '#fff');
+  } catch (e) {}
+
+  const conflict = findExistingShiftForEmployee(empNo, dateStr, { exclude: [newEvent] });
+  if (conflict) {
+    const name = employees[empNo]?.name || empNo;
+    const existType = (conflict.extendedProps && conflict.extendedProps.type === 'rest') ? 'rest day' : 'work shift';
+    const newType = (type === 'rest') ? 'rest day' : 'work shift';
+    showToast(`Duplicate entry blocked: ${name} already has a ${existType} on this date. Cannot add another ${newType}.`, 'error');
+    newEvent.remove();
+    return;
+  }
+
+  if (type === 'work') {
+    currentDroppingEvent = newEvent;
+    openShiftModal();
+  } else {
+    runConflictDetection();
+    updateStats();
+    saveToLocalStorage();
+  }
+
+  try { newEvent.setProp('title', newEvent.title); } catch (e) {}
+  try { decorateEventLater(newEvent); } catch (e) {}
 }
 
   /* ===========================
@@ -1426,7 +1505,7 @@ function initializeDraggable() {
       addEmployeeRow();
       if (draggableCardsContainer) draggableCardsContainer.innerHTML = '';
       if (draggablePlaceholder) draggablePlaceholder.classList.remove('hidden');
-      if (draggable) try { draggable.destroy(); } catch (e) {}
+      initializeDraggable();
       if (conflictTableBody) conflictTableBody.innerHTML = '';
       if (conflictsPlaceholder) conflictsPlaceholder.classList.remove('hidden');
       updateStats(0);
