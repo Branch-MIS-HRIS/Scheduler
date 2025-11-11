@@ -601,7 +601,11 @@ function initializeCalendar() {
     dayMaxEvents: true,
     height: 'auto',
 
-    // (Removed old eventDragStart/Stop body-class toggles)
+    eventDragStart(info) { document.body.classList.add('no-transform-during-drag'); },
+eventDragStop(info)  { document.body.classList.remove('no-transform-during-drag'); },
+
+eventResizeStart(info) { document.body.classList.add('no-transform-during-drag'); },
+eventResizeStop(info)  { document.body.classList.remove('no-transform-during-drag'); },
 
     /* -------------------------
        External item received
@@ -813,6 +817,11 @@ function initializeCalendar() {
   });
 
   calendar.render();
+  // Safety: double-guard transform neutralization during drag/resize
+calendar.on('eventDragStart', () => document.body.classList.add('no-transform-during-drag'));
+calendar.on('eventDragStop',  () => document.body.classList.remove('no-transform-during-drag'));
+calendar.on('eventResizeStart', () => document.body.classList.add('no-transform-during-drag'));
+calendar.on('eventResizeStop',  () => document.body.classList.remove('no-transform-during-drag'));
   try { window.calendar = calendar; } catch (e) {}
 }
 

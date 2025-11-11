@@ -884,6 +884,27 @@ body.multi-dragging { cursor: grabbing; }
 
 /* ---------- Calendar & Modal Enhancements ---------- */
 
+/* Neutralize transforms/filters only while dragging so the drag mirror uses the correct viewport coords */
+.no-transform-during-drag #app-wrapper,
+.no-transform-during-drag .executive-main,
+.no-transform-during-drag #calendar,
+.no-transform-during-drag #calendar .fc,
+.no-transform-during-drag .fc-view-harness,
+.no-transform-during-drag .fc-scroller,
+.no-transform-during-drag .fc-media-screen,
+.no-transform-during-drag .fc-view,
+.no-transform-during-drag .fc-daygrid,
+.no-transform-during-drag .fc-timegrid {
+  transform: none !important;
+  filter: none !important;
+  will-change: auto !important;
+}
+
+/* Make the drag mirror anchor from the pointer corner & avoid extra spacing */
+.fc-mirror { transform-origin: top left !important; }
+.fc-mirror .fc-event-main-frame { margin: 0 !important; }
+
+
 #calendar {
   border-radius: 20px;
   padding: 24px;
