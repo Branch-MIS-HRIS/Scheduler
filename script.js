@@ -546,9 +546,6 @@ function initializeCalendar() {
 
   // ✅ Add this before initializing the calendar
   const draggableContainer = document.getElementById('draggable-cards-container');
-  if (draggableContainer) {
-    draggableContainer.addEventListener('wheel', (e) => e.stopPropagation());
-  }
 
   calendar = new FullCalendar.Calendar(calendarEl, {
     initialView: 'dayGridMonth',
@@ -785,13 +782,34 @@ if (conflict) {
 =========================== */
 function initializeDraggable() {
   if (!draggableCardsContainer) return;
+
+  // Clean up an existing Draggable instance
   if (draggable) { try { draggable.destroy(); } catch (e) {} }
 
+  // Wire sidebar drag/scroll listeners ONCE (not inside eventData)
+  if (!__sidebarDragListenersWired) {
+    draggableCardsContainer.addEventListener('dragstart', () => { __isSidebarDragging = true; }, { capture: true });
+    draggableCardsContainer.addEventListener('dragend',   () => { __isSidebarDragging = false; }, { capture: true });
+
+    // When dragging a pill from the sidebar, stop wheel/touchmove bubbling so the calendar doesn't hijack scroll
+    draggableCardsContainer.addEventListener('wheel', (e) => {
+      if (__isSidebarDragging) e.stopPropagation();
+    }, { passive: true });
+
+    draggableCardsContainer.addEventListener('touchmove', (e) => {
+      if (__isSidebarDragging) e.stopPropagation();
+    }, { passive: true });
+
+    __sidebarDragListenersWired = true;
+  }
+
+  // Create a fresh Draggable (listeners above are now outside eventData)
   try {
     draggable = new FullCalendar.Draggable(draggableCardsContainer, {
       itemSelector: '.fc-event-pill',
-      eventData: function (eventEl) {
+      eventData(eventEl) {
         try {
+          // Cache + deep clone template payload
           if (!eventEl._fcEventDataTemplate) {
             const raw = eventEl.getAttribute('data-event');
             eventEl._fcEventDataTemplate = raw ? JSON.parse(raw) : null;
@@ -799,52 +817,54 @@ function initializeDraggable() {
           const template = eventEl._fcEventDataTemplate;
           if (!template) return null;
 
-          // FIX: deep clone for every drop to isolate objects
           const parsed = JSON.parse(JSON.stringify(template));
-          // assign a unique temp id to prevent shared id
-          const uid = `evt_${Date.now()}_${Math.random().toString(36).slice(2,6)}`;
+
+          // Unique id per drop to prevent collisions
+          const uid = `evt_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
           parsed.id = parsed.id || uid;
           if (parsed.extendedProps) parsed.extendedProps.id = parsed.extendedProps.id || uid;
 
-          const t = parsed.extendedProps && parsed.extendedProps.type ? parsed.extendedProps.type : '';
+          // Ensure consistent pill classes based on type
+          const t = parsed.extendedProps?.type || 'work';
           const classSet = new Set(parsed.classNames || []);
           classSet.add('fc-event-pill');
-          if (t === 'rest') classSet.add('fc-event-rest'); else classSet.add('fc-event-work');
+          classSet.add(t === 'rest' ? 'fc-event-rest' : 'fc-event-work');
           parsed.classNames = Array.from(classSet);
+
           return parsed;
         } catch (err) {
           console.error('Invalid event data on draggable element', err);
           return null;
         }
       },
-      dragScroll: false // ✅ Prevent ghost jumping, but disables scroll globally
+      // Keep calendar from auto-scrolling the page while dragging from the sidebar
+      dragScroll: false
     });
-
-    // ✅ FIX: Re-enable scroll in the draggable sidebar container
-    draggableCardsContainer.addEventListener('wheel', (e) => e.stopPropagation(), { passive: true });
-    draggableCardsContainer.addEventListener('touchmove', (e) => e.stopPropagation(), { passive: true });
-
   } catch (err) {
     console.warn('initializeDraggable error', err);
   }
 
-  // Cosmetic lift while dragging inside calendar
-  if (calendar && typeof calendar.on === 'function') {
-    calendar.on('eventDragStart', function(info) {
+  // Cosmetic lift while dragging inside the calendar — wire once
+  if (calendar && typeof calendar.on === 'function' && !__calendarDragLiftWired) {
+    calendar.on('eventDragStart', function (info) {
       info.el.style.transform = 'translateY(-4px)';
     });
-    calendar.on('eventDragStop', function(info) {
+    calendar.on('eventDragStop', function (info) {
       info.el.style.transform = 'translateY(0)';
     });
+    __calendarDragLiftWired = true;
   }
 
-  // Also guard against transforms during external HTML5 drag
-  draggableCardsRoot?.addEventListener('dragstart', () => { 
-    document.body.classList.add('no-transform-during-drag'); 
-  });
-  draggableCardsRoot?.addEventListener('dragend', () => { 
-    document.body.classList.remove('no-transform-during-drag'); 
-  });
+  // Guard against body transforms during external HTML5 drag — wire once
+  if (!__bodyDragGuardsWired) {
+    draggableCardsRoot?.addEventListener('dragstart', () => {
+      document.body.classList.add('no-transform-during-drag');
+    });
+    draggableCardsRoot?.addEventListener('dragend', () => {
+      document.body.classList.remove('no-transform-during-drag');
+    });
+    __bodyDragGuardsWired = true;
+  }
 }
 
   /* ===========================
