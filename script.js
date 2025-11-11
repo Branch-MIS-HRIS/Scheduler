@@ -543,204 +543,278 @@ function getDateUnderPointer() {
     return { color, workGradient, restGradient };
   }
 
-  /* ===========================
-     CALENDAR INIT
-  =========================== */
+/* ===========================
+   CALENDAR INIT (improved)
+=========================== */
 function initializeCalendar() {
   if (!calendarEl) return;
 
-  // ✅ Add this before initializing the calendar
+  // Make sidebar items draggable for FullCalendar
   const draggableContainer = document.getElementById('draggable-cards-container');
+  if (draggableContainer && FullCalendar && FullCalendar.Draggable) {
+    new FullCalendar.Draggable(draggableContainer, {
+      itemSelector: '.fc-event-pill, .draggable-pill',
+      eventData: (el) => {
+        const ds = el.dataset || {};
+        const titleFromDom =
+          ds.title ||
+          el.querySelector('.pill-name')?.textContent?.trim() ||
+          el.textContent?.trim() ||
+          'Shift';
 
+        const pillClasses = (el.className || '')
+          .split(/\s+/)
+          .filter(Boolean);
+
+        return {
+          title: titleFromDom,
+          allDay: true,
+          classNames: Array.from(new Set(['fc-event-pill', ...pillClasses])),
+          extendedProps: {
+            type: ds.type || 'work',
+            empNo: ds.empNo || ds.empno || ds.employeeNo || null,
+            employeeNo: ds.employeeNo || ds.empNo || ds.empno || null,
+            position: ds.position || null,
+          },
+        };
+      },
+    });
+  }
+
+  // Build the calendar
   calendar = new FullCalendar.Calendar(calendarEl, {
     initialView: 'dayGridMonth',
+    headerToolbar: {
+      left: 'prev,next today',
+      center: 'title',
+      right: 'dayGridMonth,dayGridWeek,dayGridDay',
+    },
+
+    // Core interaction settings
     editable: true,
     droppable: true,
-    dragScroll: false, // Keep this for the calendar only
+    dropAccept: '.fc-event-pill, .draggable-pill',
+    eventStartEditable: true,
+    eventDurationEditable: false,
+    dragScroll: false,
     selectable: true,
     dayMaxEvents: true,
     height: 'auto',
-    headerToolbar: { 
-      left: 'prev,next today', 
-      center: 'title', 
-      right: 'dayGridMonth,dayGridWeek,dayGridDay' 
-    },
 
-    eventDragStart(info) {
-      document.body.classList.add('no-transform-during-drag');
-    },
-    eventDragStop(info) {
-      document.body.classList.remove('no-transform-during-drag');
-    },
+    // (Removed old eventDragStart/Stop body-class toggles)
 
-      /* -------------------------
-         FIXED: eventReceive
-      ------------------------- */
-      eventReceive: function (info) {
-        // FIX: reset any stale multi-select/batch state before handling first drop
-        try {
-          if (typeof selectedSchedules !== 'undefined' && selectedSchedules.clear) selectedSchedules.clear();
-          if (typeof selectedTargetDates !== 'undefined' && selectedTargetDates.clear) selectedTargetDates.clear();
-          window.__multiSelectDragActive = false;
-          document.body.classList.remove('multi-dragging');
-        } catch (e) {}
+    /* -------------------------
+       External item received
+    ------------------------- */
+    eventReceive(info) {
+      try {
+        if (typeof selectedSchedules !== 'undefined' && selectedSchedules?.clear) selectedSchedules.clear();
+        if (typeof selectedTargetDates !== 'undefined' && selectedTargetDates?.clear) selectedTargetDates.clear();
+        window.__multiSelectDragActive = false;
+        document.body.classList.remove('multi-dragging');
+      } catch (e) {}
 
-        const newEvent = info.event;
-        try {
-          const nowId = `evt_${Date.now()}_${Math.random().toString(36).slice(2,6)}`;
-          const ext = JSON.parse(JSON.stringify(newEvent.extendedProps || {}));
-          if (!ext.id && !newEvent.id) {
-            ext.id = nowId;
-            newEvent.setExtendedProp('id', nowId);
-            try { newEvent.setProp('id', nowId); } catch (e) {}
-          }
-          if (ext.empNo == null && newEvent.extendedProps?.empNo != null) {
-            newEvent.setExtendedProp('empNo', String(newEvent.extendedProps.empNo));
-          }
-          if (ext.employeeNo == null && newEvent.extendedProps?.employeeNo != null) {
-            newEvent.setExtendedProp('employeeNo', String(newEvent.extendedProps.employeeNo));
-          }
-          const safeType = ext.type || newEvent.extendedProps?.type || 'work';
-          newEvent.setExtendedProp('type', safeType);
-        } catch (e) { console.warn('eventReceive: cloning props failed', e); }
+      const newEvent = info.event;
+      try {
+        const nowId = `evt_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+        const ext = JSON.parse(JSON.stringify(newEvent.extendedProps || {}));
 
-        finalizeSidebarEventDrop(newEvent);
-      },
-
-      drop: function(info) {
-        const payload = normalizeSidebarPayload(parseSidebarDragPayload(info.draggedEl, info.jsEvent?.dataTransfer));
-        if (!payload || !calendar) return;
-
-        const eventProps = {
-          title: payload.title || (info.draggedEl ? info.draggedEl.textContent?.trim() : ''),
-          start: info.dateStr || (info.date ? info.date.toISOString() : undefined),
-          allDay: !!info.allDay,
-          classNames: payload.classNames,
-          extendedProps: payload.extendedProps
-        };
-        if (payload.id) eventProps.id = payload.id;
-
-        const newEvent = calendar.addEvent(eventProps);
-        if (!newEvent) return;
-        finalizeSidebarEventDrop(newEvent);
-      },
-
-      /* Drag inside calendar */
-      eventDrop: function(info) {
-        const eventId = info.event.extendedProps?.id || info.event.id;
-        const multiDragActive = (typeof window !== 'undefined' && window.__multiSelectDragActive) || isDragging;
-        if (multiDragActive || (selectedSchedules && selectedSchedules.size > 1 && selectedSchedules.has(String(eventId)))) {
-          info.revert(); return;
-        }
-        const movedEmpNo = info.event.extendedProps?.empNo;
-        if (movedEmpNo) {
-          const conflict = findExistingShiftForEmployee(movedEmpNo, info.event.startStr, { exclude: [info.event] });
-          if (conflict) {
-  const employeeName = employees[movedEmpNo]?.name || movedEmpNo;
-  const existType = (conflict.extendedProps && conflict.extendedProps.type === 'rest') ? 'rest day' : 'work shift';
-  const movingType = (info.event.extendedProps && info.event.extendedProps.type === 'rest') ? 'rest day' : 'work shift';
-  showToast(`Move blocked: ${employeeName} already has a ${existType} on this date. Cannot overlap with another ${movingType}.`, 'error');
-  info.revert();
-  return;
-}
-        }
-        runConflictDetection();
-        updateStats();
-        saveToLocalStorage();
-      },
-
-      eventRemove: function() { runConflictDetection(); updateStats(); saveToLocalStorage(); },
-
-      eventClick: function(info) {
-        if (info.jsEvent && hasMultiSelectModifier(info.jsEvent)) { info.jsEvent.preventDefault(); return; }
-        openDeleteModal(info.event);
-      },
-
-      eventDidMount: function(info) {
-        try {
-          if (!info.event.extendedProps?.id) {
-            const fallbackId = (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : (info.event.id || `evt-${Date.now()}`);
-            info.event.setExtendedProp('id', fallbackId);
-          }
-        } catch (e) {}
-
-        decorateSingleEventElement(info.event, info.el);
-
-        const { type, shiftCode, isConflict, empNo } = info.event.extendedProps;
-        const emp = employees[empNo];
-
-        if (empNo) { try { info.el.setAttribute('data-empno', empNo); info.el.dataset.empno = String(empNo); } catch (e) {} }
-        if (!emp) { info.el.style.display = 'none'; return; }
-
-        const color = ensureEmployeeColor(empNo);
-        if (type === 'work') {
-          try {
-            const grad = getGradientFromBaseColor(color, 'work');
-            info.el.style.setProperty('background', grad, 'important');
-            info.el.style.setProperty('color', '#fff', 'important');
-            info.el.style.setProperty('border', 'none', 'important');
-            const inner = info.el.querySelector('.fc-event-main-frame') || info.el;
-            inner.style.setProperty('background', grad, 'important');
-            inner.style.setProperty('color', '#fff', 'important');
-          } catch (e) {
-            info.el.style.backgroundColor = color;
-            info.el.style.backgroundImage = 'none';
-            info.el.style.color = '#fff';
-            info.el.style.border = 'none';
-            const inner = info.el.querySelector('.fc-event-main-frame') || info.el;
-            inner.style.backgroundColor = color; inner.style.backgroundImage = 'none'; inner.style.color = '#fff';
-          }
-        } else if (type === 'rest') {
-          try {
-            const grad = getGradientFromBaseColor(color, 'rest');
-            info.el.style.setProperty('background', grad, 'important');
-            info.el.style.setProperty('color', color, 'important');
-            info.el.style.setProperty('border', `2px solid ${color}`, 'important');
-            const inner = info.el.querySelector('.fc-event-main-frame') || info.el;
-            inner.style.setProperty('background', grad, 'important');
-            inner.style.setProperty('color', color, 'important');
-            inner.style.setProperty('border', `2px solid ${color}`, 'important');
-          } catch (e) {
-            info.el.style.backgroundColor = '#fff';
-            info.el.style.backgroundImage = 'none';
-            info.el.style.border = `2px solid ${color}`;
-            info.el.style.color = color;
-            const inner = info.el.querySelector('.fc-event-main-frame') || info.el;
-            inner.style.backgroundColor = '#fff';
-            inner.style.backgroundImage = 'none';
-            inner.style.border = `2px solid ${color}`;
-            inner.style.color = color;
-          }
+        if (!ext.id && !newEvent.id) {
+          ext.id = nowId;
+          newEvent.setExtendedProp('id', nowId);
+          try { newEvent.setProp('id', nowId); } catch (_) {}
         }
 
-        refreshEventTooltip(info.event, info.el);
-        info.el.classList.add(type === 'work' ? 'fc-event-work' : 'fc-event-rest');
-        if (isConflict) info.el.classList.add('fc-event-conflict'); else info.el.classList.remove('fc-event-conflict');
+        if (ext.empNo == null && newEvent.extendedProps?.empNo != null) {
+          newEvent.setExtendedProp('empNo', String(newEvent.extendedProps.empNo));
+        }
+        if (ext.employeeNo == null && newEvent.extendedProps?.employeeNo != null) {
+          newEvent.setExtendedProp('employeeNo', String(newEvent.extendedProps.employeeNo));
+        }
 
-        const shiftInfo = shiftCode ? ` (${shiftCode})` : '';
-        const title = `${info.event.title} (${emp.position})\nType: ${type.charAt(0).toUpperCase()+type.slice(1)}${shiftInfo}`;
-        info.el.title = title;
-      },
+        const safeType = ext.type || newEvent.extendedProps?.type || 'work';
+        newEvent.setExtendedProp('type', safeType);
 
-      eventContent: function(arg) {
-        const { shiftCode } = arg.event.extendedProps;
-        const shiftHtml = shiftCode ? `<span class="pill-shift">${shiftCode}</span>` : '';
-        return { html: `<div class="pill-content"><span class="pill-name">${arg.event.title}</span>${shiftHtml}</div>` };
-      },
+        if (newEvent.allDay !== true) {
+          try { newEvent.setAllDay(true); } catch (_) {}
+        }
 
-      dayCellClassNames: function(arg) {
-        if (arg.date.getDay() === 0 || arg.date.getDay() === 6) return 'fc-day-sat-sun';
-        return null;
+        const baseClasses = new Set([...(newEvent.classNames || []), 'fc-event-pill']);
+        newEvent.setProp('classNames', Array.from(baseClasses));
+      } catch (e) {
+        console.warn('eventReceive: cloning/normalize failed', e);
       }
-    });
 
-    // FIX: prevent transforms during native event drag
-    calendar.on('eventDragStart', function(){ document.body.classList.add('no-transform-during-drag'); });
-    calendar.on('eventDragStop', function(){ document.body.classList.remove('no-transform-during-drag'); });
+      finalizeSidebarEventDrop(newEvent);
+    },
 
-    calendar.render();
-    try { window.calendar = calendar; } catch (e) {}
-  }
+    /* -------------------------
+       Plain DOM drop fallback
+    ------------------------- */
+    drop(info) {
+      const payload = normalizeSidebarPayload(
+        parseSidebarDragPayload(info.draggedEl, info.jsEvent?.dataTransfer)
+      );
+      if (!payload || !calendar) return;
+
+      const eventProps = {
+        title:
+          payload.title ||
+          (info.draggedEl ? info.draggedEl.textContent?.trim() : '') ||
+          'Shift',
+        start: info.dateStr || (info.date ? info.date.toISOString() : undefined),
+        allDay: true,
+        classNames: Array.from(new Set(['fc-event-pill', ...(payload.classNames || [])])),
+        extendedProps: payload.extendedProps,
+      };
+      if (payload.id) eventProps.id = payload.id;
+
+      const newEvent = calendar.addEvent(eventProps);
+      if (!newEvent) return;
+      finalizeSidebarEventDrop(newEvent);
+    },
+
+    /* -------------------------
+       Dragging existing events
+    ------------------------- */
+    eventDrop(info) {
+      const eventId = info.event.extendedProps?.id || info.event.id;
+      const multiDragActive =
+        (typeof window !== 'undefined' && window.__multiSelectDragActive) ||
+        (typeof isDragging !== 'undefined' && !!isDragging);
+
+      if (
+        multiDragActive ||
+        (typeof selectedSchedules !== 'undefined' &&
+          selectedSchedules?.size > 1 &&
+          selectedSchedules.has(String(eventId)))
+      ) {
+        info.revert();
+        return;
+      }
+
+      const movedEmpNo = info.event.extendedProps?.empNo;
+      if (movedEmpNo) {
+        const conflict = findExistingShiftForEmployee(
+          movedEmpNo,
+          info.event.startStr,
+          { exclude: [info.event] }
+        );
+        if (conflict) {
+          const employeeName = (typeof employees !== 'undefined' && employees?.[movedEmpNo]?.name) || movedEmpNo;
+          const existType =
+            (conflict.extendedProps && conflict.extendedProps.type === 'rest')
+              ? 'rest day'
+              : 'work shift';
+          const movingType =
+            (info.event.extendedProps && info.event.extendedProps.type === 'rest')
+              ? 'rest day'
+              : 'work shift';
+
+          showToast(
+            `Move blocked: ${employeeName} already has a ${existType} on this date. Cannot overlap with another ${movingType}.`,
+            'error'
+          );
+          info.revert();
+          return;
+        }
+      }
+
+      runConflictDetection();
+      updateStats();
+      saveToLocalStorage();
+    },
+
+    eventRemove() { runConflictDetection(); updateStats(); saveToLocalStorage(); },
+
+    eventClick(info) {
+      if (info.jsEvent && hasMultiSelectModifier(info.jsEvent)) { info.jsEvent.preventDefault(); return; }
+      openDeleteModal(info.event);
+    },
+
+    eventDidMount(info) {
+      try {
+        if (!info.event.extendedProps?.id) {
+          const fallbackId = (typeof crypto !== 'undefined' && crypto.randomUUID)
+            ? crypto.randomUUID()
+            : (info.event.id || `evt-${Date.now()}`);
+          info.event.setExtendedProp('id', fallbackId);
+        }
+      } catch (e) {}
+
+      decorateSingleEventElement(info.event, info.el);
+
+      const { type, shiftCode, isConflict, empNo } = info.event.extendedProps;
+      const emp = employees[empNo];
+
+      if (empNo) { try { info.el.setAttribute('data-empno', empNo); info.el.dataset.empno = String(empNo); } catch (e) {} }
+      if (!emp) { info.el.style.display = 'none'; return; }
+
+      const color = ensureEmployeeColor(empNo);
+      if (type === 'work') {
+        try {
+          const grad = getGradientFromBaseColor(color, 'work');
+          info.el.style.setProperty('background', grad, 'important');
+          info.el.style.setProperty('color', '#fff', 'important');
+          info.el.style.setProperty('border', 'none', 'important');
+          const inner = info.el.querySelector('.fc-event-main-frame') || info.el;
+          inner.style.setProperty('background', grad, 'important');
+          inner.style.setProperty('color', '#fff', 'important');
+        } catch (e) {
+          info.el.style.backgroundColor = color;
+          info.el.style.backgroundImage = 'none';
+          info.el.style.color = '#fff';
+          info.el.style.border = 'none';
+          const inner = info.el.querySelector('.fc-event-main-frame') || info.el;
+          inner.style.backgroundColor = color; inner.style.backgroundImage = 'none'; inner.style.color = '#fff';
+        }
+      } else if (type === 'rest') {
+        try {
+          const grad = getGradientFromBaseColor(color, 'rest');
+          info.el.style.setProperty('background', grad, 'important');
+          info.el.style.setProperty('color', color, 'important');
+          info.el.style.setProperty('border', `2px solid ${color}`, 'important');
+          const inner = info.el.querySelector('.fc-event-main-frame') || info.el;
+          inner.style.setProperty('background', grad, 'important');
+          inner.style.setProperty('color', color, 'important');
+          inner.style.setProperty('border', `2px solid ${color}`, 'important');
+        } catch (e) {
+          info.el.style.backgroundColor = '#fff';
+          info.el.style.backgroundImage = 'none';
+          info.el.style.border = `2px solid ${color}`;
+          info.el.style.color = color;
+          const inner = info.el.querySelector('.fc-event-main-frame') || info.el;
+          inner.style.backgroundColor = '#fff';
+          inner.style.backgroundImage = 'none';
+          inner.style.border = `2px solid ${color}`;
+          inner.style.color = color;
+        }
+      }
+
+      refreshEventTooltip(info.event, info.el);
+      info.el.classList.add(type === 'work' ? 'fc-event-work' : 'fc-event-rest');
+      if (isConflict) info.el.classList.add('fc-event-conflict'); else info.el.classList.remove('fc-event-conflict');
+
+      const shiftInfo = shiftCode ? ` (${shiftCode})` : '';
+      const title = `${info.event.title} (${emp.position})\nType: ${type.charAt(0).toUpperCase()+type.slice(1)}${shiftInfo}`;
+      info.el.title = title;
+    },
+
+    eventContent(arg) {
+      const { shiftCode } = arg.event.extendedProps;
+      const shiftHtml = shiftCode ? `<span class="pill-shift">${shiftCode}</span>` : '';
+      return { html: `<div class="pill-content"><span class="pill-name">${arg.event.title}</span>${shiftHtml}</div>` };
+    },
+
+    dayCellClassNames(arg) {
+      if (arg.date.getDay() === 0 || arg.date.getDay() === 6) return 'fc-day-sat-sun';
+      return null;
+    },
+  });
+
+  calendar.render();
+  try { window.calendar = calendar; } catch (e) {}
+}
 
   if (calendarEl && !calendarEl.__sidebarDragOverBound) {
     calendarEl.addEventListener('dragover', (e) => {

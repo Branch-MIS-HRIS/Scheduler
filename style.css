@@ -729,6 +729,13 @@ tbody tr td:first-child {
   transform: scale(1.03);
   box-shadow: 0 6px 20px rgba(0,0,0,0.08);
 }
+/* Prevent hover scale fighting the drag position */
+.fc-event.fc-dragging .fc-event-main-frame,
+.fc-event-pill.drag-preview,
+.fc-event-pill.fc-dragging,
+.fc-event.fc-dragging:hover {
+  transform: none !important;
+}
 
 /* Multi-select highlight */
 .schedule-pill.selected, .fc-event-pill.selected {
@@ -984,8 +991,6 @@ body.multi-dragging { cursor: grabbing; }
   min-width: 120px !important;
   max-width: 420px !important;
   box-sizing: border-box !important;
-  transform: none !important;
-  transform-origin: top left !important;
 }
 .fc-mirror { pointer-events: none !important; }
 
@@ -1026,10 +1031,6 @@ body.multi-dragging { cursor: grabbing; }
 }
 
 /* Limit transform neutralization to the calendar content only */
-.no-transform-during-drag #calendar *:not(.drag-ghost) {
-  transform: none !important;
-  transition: none !important;
-}
 /* --- Sidebar Scroll Enhancements --- */
 .executive-sidebar {
   display: flex;
