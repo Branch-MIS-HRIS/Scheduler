@@ -18,10 +18,8 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     
-<!-- FullCalendar v6 -->
-<link href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.14/main.min.css" rel="stylesheet">
-<script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.14/index.global.min.js"></script>
-
+    <!-- 3. FullCalendar v6 (Core, Interaction, DayGrid, Draggable) -->
+    <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.14/index.global.min.js"></script>
 
     <!-- 3.5 Tooltip Library (Tippy.js) -->
 <script src="https://unpkg.com/@popperjs/core@2"></script>
@@ -391,55 +389,6 @@
                 </h3>
                 <div class="mt-4 space-y-4">
                     <p class="text-sm text-gray-600">This will generate a .xlsx file with the current schedule. Please review the summary below.</p>
-
-                    <!-- Export Details -->
-<div id="export-details" class="p-4 border rounded-lg bg-gray-50">
-  <p class="text-sm text-gray-700">
-    Please input your <strong>Branch code</strong>, <strong>Branch name</strong>, and <strong>Month</strong>.
-  </p>
-
-  <div class="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-3">
-    <!-- Branch Code -->
-    <div>
-      <label for="export-branch-code" class="block text-sm font-medium text-gray-700">Branch code</label>
-      <input
-        type="text"
-        id="export-branch-code"
-        class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm"
-        placeholder="e.g., BR-123"
-        autocomplete="off"
-      />
-    </div>
-
-    <!-- Branch Name -->
-    <div>
-      <label for="export-branch-name" class="block text-sm font-medium text-gray-700">Branch name</label>
-      <input
-        type="text"
-        id="export-branch-name"
-        class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm"
-        placeholder="e.g., Ayala Center Cebu"
-        autocomplete="off"
-      />
-    </div>
-
-    <!-- Month (user must type) -->
-    <div>
-      <label for="export-month" class="block text-sm font-medium text-gray-700">Month</label>
-      <input
-        type="text"
-        id="export-month"
-        class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm"
-        placeholder="e.g., Nov 2025"
-        autocomplete="off"
-      />
-      <!-- no prefill, no auto-format -->
-    </div>
-  </div>
-
-  <p class="helper-text mt-2">Your file name will be: <code>BR CODE_bRANCH NAME_Month_WS_RD_Schedule.xlsx</code></p>
-</div>
-
                     
                     <!-- Conflict Warning Banner -->
                     <div id="export-conflict-warning" class="hidden p-4 bg-yellow-50 border border-yellow-200 rounded-md">
@@ -521,35 +470,5 @@
     <!-- ============== APP SCRIPT =================== -->
     <!-- ============================================= -->
     <script src="script.js"></script>
-<script>
-  // Fallback boot: if script.js didn't render the calendar, do it here
-  document.addEventListener('DOMContentLoaded', function () {
-    if (!window.FullCalendar) {
-      console.error('FullCalendar failed to load.');
-      const calDiv = document.getElementById('calendar');
-      if (calDiv) calDiv.insertAdjacentHTML('afterbegin',
-        '<div style="padding:12px;color:#b91c1c;">FullCalendar failed to load.</div>');
-      return;
-    }
-
-    const calDiv = document.getElementById('calendar');
-    if (!calDiv) return;
-
-    // Prevent double-init if script.js already created a calendar
-    if (calDiv.__fcBooted) return;
-
-    try {
-      const calendar = new FullCalendar.Calendar(calDiv, {
-        initialView: 'dayGridMonth',
-        height: 'auto'   // let it grow with your layout
-      });
-      calendar.render();
-      calDiv.__fcBooted = true;
-    } catch (e) {
-      console.error('Calendar init error:', e);
-    }
-  });
-</script>
-
 </body>
 </html>
