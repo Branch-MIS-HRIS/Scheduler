@@ -1028,20 +1028,20 @@ body.multi-dragging { cursor: grabbing; }
   transform: none !important;
   transition: none !important;  /* added */
 }
-/* --- Sidebar Split Scroll Zones (Final Clean Version) --- */
+/* --- FINAL FIX: Sidebar Dual Scroll --- */
 .executive-sidebar {
   display: flex;
   flex-direction: column;
-  overflow: hidden !important;
+  height: 100vh; /* full viewport height */
+  overflow: hidden;
 }
 
-/* Employees Section */
+/* Employees section (scrolls independently) */
 .executive-sidebar > .data-surface:first-of-type {
   flex: 1;
   display: flex;
   flex-direction: column;
   min-height: 0;
-  overflow: hidden;
 }
 
 #employee-table-body {
@@ -1060,20 +1060,20 @@ body.multi-dragging { cursor: grabbing; }
   border-radius: 999px;
 }
 
-/* Keep Save & Generate visible */
+/* Keep the Save & Generate visible */
 .executive-sidebar #save-generate-btn {
   position: sticky;
   bottom: 0;
   z-index: 5;
 }
 
-/* Draggable Cards Section */
+/* Draggable cards section (scrolls separately) */
 .executive-sidebar > .data-surface.subtle-surface {
   flex: 1;
   display: flex;
   flex-direction: column;
   min-height: 0;
-  margin-top: 1rem;
+  overflow: hidden;
 }
 
 #draggable-cards-container {
@@ -1081,8 +1081,6 @@ body.multi-dragging { cursor: grabbing; }
   overflow-y: auto;
   overflow-x: hidden;
   padding-right: 6px;
-  scrollbar-width: thin;
-  scrollbar-color: rgba(148,163,184,0.35) transparent;
 }
 
 #draggable-cards-container::-webkit-scrollbar {
