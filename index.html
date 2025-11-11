@@ -18,10 +18,9 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     
-    <!-- 3. FullCalendar v6 (Core, Interaction, DayGrid, Draggable) -->
-    <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.14/index.global.min.js"></script>
-    <!-- FullCalendar CSS (required) -->
+<!-- FullCalendar v6 -->
 <link href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.14/main.min.css" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.14/index.global.min.js"></script>
 
 
     <!-- 3.5 Tooltip Library (Tippy.js) -->
@@ -522,5 +521,35 @@
     <!-- ============== APP SCRIPT =================== -->
     <!-- ============================================= -->
     <script src="script.js"></script>
+<script>
+  // Fallback boot: if script.js didn't render the calendar, do it here
+  document.addEventListener('DOMContentLoaded', function () {
+    if (!window.FullCalendar) {
+      console.error('FullCalendar failed to load.');
+      const calDiv = document.getElementById('calendar');
+      if (calDiv) calDiv.insertAdjacentHTML('afterbegin',
+        '<div style="padding:12px;color:#b91c1c;">FullCalendar failed to load.</div>');
+      return;
+    }
+
+    const calDiv = document.getElementById('calendar');
+    if (!calDiv) return;
+
+    // Prevent double-init if script.js already created a calendar
+    if (calDiv.__fcBooted) return;
+
+    try {
+      const calendar = new FullCalendar.Calendar(calDiv, {
+        initialView: 'dayGridMonth',
+        height: 'auto'   // let it grow with your layout
+      });
+      calendar.render();
+      calDiv.__fcBooted = true;
+    } catch (e) {
+      console.error('Calendar init error:', e);
+    }
+  });
+</script>
+
 </body>
 </html>
