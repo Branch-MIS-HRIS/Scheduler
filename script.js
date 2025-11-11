@@ -780,91 +780,136 @@ if (conflict) {
 /* ===========================
    DRAGGABLE (SIDEBAR) INIT
 =========================== */
+/* ===========================
+   DRAGGABLE (SIDEBAR) INIT — fixed scrolling + safe listeners
+=========================== */
 function initializeDraggable() {
   if (!draggableCardsContainer) return;
 
-  // Clean up an existing Draggable instance
-  if (draggable) { try { draggable.destroy(); } catch (e) {} }
-
-  // Wire sidebar drag/scroll listeners ONCE (not inside eventData)
-  if (!__sidebarDragListenersWired) {
-    draggableCardsContainer.addEventListener('dragstart', () => { __isSidebarDragging = true; }, { capture: true });
-    draggableCardsContainer.addEventListener('dragend',   () => { __isSidebarDragging = false; }, { capture: true });
-
-    // When dragging a pill from the sidebar, stop wheel/touchmove bubbling so the calendar doesn't hijack scroll
-    draggableCardsContainer.addEventListener('wheel', (e) => {
-      if (__isSidebarDragging) e.stopPropagation();
-    }, { passive: true });
-
-    draggableCardsContainer.addEventListener('touchmove', (e) => {
-      if (__isSidebarDragging) e.stopPropagation();
-    }, { passive: true });
-
-    __sidebarDragListenersWired = true;
+  // Tear down any existing instance safely
+  if (draggable) {
+    try { draggable.destroy(); } catch (_) {}
+    draggable = null;
   }
 
-  // Create a fresh Draggable (listeners above are now outside eventData)
+  // ---- Shared state for sidebar drag + autoscroll
+  let isDraggingFromSidebar = false;
+  let lastPointerY = null;
+  let rafId = null;
+
+  const EDGE = 70;           // px from top/bottom to start autoscroll
+  const MAX_SPEED = 22;      // px per frame
+  const container = draggableCardsContainer;
+
+  // Auto-scroll loop while dragging external events from the sidebar
+  const autoScroll = () => {
+    if (!isDraggingFromSidebar || lastPointerY == null) return;
+
+    const rect = container.getBoundingClientRect();
+    let delta = 0;
+
+    if (lastPointerY < rect.top + EDGE) {
+      const d = Math.max(0, EDGE - (lastPointerY - rect.top));
+      delta = -Math.min(MAX_SPEED, (d / EDGE) * MAX_SPEED);
+    } else if (lastPointerY > rect.bottom - EDGE) {
+      const d = Math.max(0, EDGE - (rect.bottom - lastPointerY));
+      delta = Math.min(MAX_SPEED, (d / EDGE) * MAX_SPEED);
+    }
+
+    if (delta !== 0) {
+      container.scrollTop += delta;
+    }
+    rafId = requestAnimationFrame(autoScroll);
+  };
+
+  // Track pointer position globally (FullCalendar uses pointer events)
+  const onPointerMove = (e) => { lastPointerY = e.clientY; };
+
+  // Watch for FullCalendar’s "fc-dragging" body class to know when a drag starts/ends
+  const mo = new MutationObserver(() => {
+    const dragging = document.body.classList.contains('fc-dragging');
+    if (dragging && !isDraggingFromSidebar) {
+      // Drag started (from anywhere) — check if pointer is over the sidebar container
+      const r = container.getBoundingClientRect();
+      // Heuristic: if pointer is within container at drag start, treat as sidebar drag
+      if (lastPointerY != null && lastPointerY >= r.top && lastPointerY <= r.bottom) {
+        isDraggingFromSidebar = true;
+        document.body.classList.add('no-transform-during-drag');
+        rafId = requestAnimationFrame(autoScroll);
+      }
+    } else if (!dragging && isDraggingFromSidebar) {
+      // Drag ended
+      isDraggingFromSidebar = false;
+      document.body.classList.remove('no-transform-during-drag');
+      lastPointerY = null;
+      if (rafId) cancelAnimationFrame(rafId);
+      rafId = null;
+    }
+  });
+
+  // Start observing the body class changes once per init
+  mo.observe(document.body, { attributes: true, attributeFilter: ['class'] });
+  // Global pointer tracker (one listener)
+  window.addEventListener('pointermove', onPointerMove, { passive: true });
+
+  // ---- Build the external Draggable
   try {
-    draggable = new FullCalendar.Draggable(draggableCardsContainer, {
+    draggable = new FullCalendar.Draggable(container, {
       itemSelector: '.fc-event-pill',
-      eventData(eventEl) {
-        try {
-          // Cache + deep clone template payload
-          if (!eventEl._fcEventDataTemplate) {
-            const raw = eventEl.getAttribute('data-event');
-            eventEl._fcEventDataTemplate = raw ? JSON.parse(raw) : null;
-          }
-          const template = eventEl._fcEventDataTemplate;
-          if (!template) return null;
+      // Keep calendar's auto-scroll off; we handle sidebar autoscroll ourselves
+      dragScroll: false,
 
-          const parsed = JSON.parse(JSON.stringify(template));
-
-          // Unique id per drop to prevent collisions
-          const uid = `evt_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
-          parsed.id = parsed.id || uid;
-          if (parsed.extendedProps) parsed.extendedProps.id = parsed.extendedProps.id || uid;
-
-          // Ensure consistent pill classes based on type
-          const t = parsed.extendedProps?.type || 'work';
-          const classSet = new Set(parsed.classNames || []);
-          classSet.add('fc-event-pill');
-          classSet.add(t === 'rest' ? 'fc-event-rest' : 'fc-event-work');
-          parsed.classNames = Array.from(classSet);
-
-          return parsed;
-        } catch (err) {
-          console.error('Invalid event data on draggable element', err);
-          return null;
+      eventData: function (eventEl) {
+        // parse template once
+        if (!eventEl._fcEventDataTemplate) {
+          const raw = eventEl.getAttribute('data-event');
+          eventEl._fcEventDataTemplate = raw ? JSON.parse(raw) : null;
         }
-      },
-      // Keep calendar from auto-scrolling the page while dragging from the sidebar
-      dragScroll: false
+        const template = eventEl._fcEventDataTemplate;
+        if (!template) return null;
+
+        // deep clone to avoid object reuse across drops
+        const parsed = JSON.parse(JSON.stringify(template));
+        const uid = `evt_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+        parsed.id = parsed.id || uid;
+        if (parsed.extendedProps) parsed.extendedProps.id = parsed.extendedProps.id || uid;
+
+        // classnames
+        const t = parsed.extendedProps?.type || '';
+        const classSet = new Set(parsed.classNames || []);
+        classSet.add('fc-event-pill');
+        classSet.add(t === 'rest' ? 'fc-event-rest' : 'fc-event-work');
+        parsed.classNames = Array.from(classSet);
+
+        return parsed;
+      }
     });
   } catch (err) {
     console.warn('initializeDraggable error', err);
   }
 
-  // Cosmetic lift while dragging inside the calendar — wire once
-  if (calendar && typeof calendar.on === 'function' && !__calendarDragLiftWired) {
-    calendar.on('eventDragStart', function (info) {
-      info.el.style.transform = 'translateY(-4px)';
-    });
-    calendar.on('eventDragStop', function (info) {
-      info.el.style.transform = 'translateY(0)';
-    });
-    __calendarDragLiftWired = true;
+  // Cosmetic lift while dragging inside calendar (unchanged)
+  if (calendar && typeof calendar.on === 'function') {
+    calendar.on('eventDragStart', (info) => { info.el.style.transform = 'translateY(-4px)'; });
+    calendar.on('eventDragStop',  (info) => { info.el.style.transform = 'translateY(0)'; });
   }
 
-  // Guard against body transforms during external HTML5 drag — wire once
-  if (!__bodyDragGuardsWired) {
-    draggableCardsRoot?.addEventListener('dragstart', () => {
-      document.body.classList.add('no-transform-during-drag');
-    });
-    draggableCardsRoot?.addEventListener('dragend', () => {
-      document.body.classList.remove('no-transform-during-drag');
-    });
-    __bodyDragGuardsWired = true;
-  }
+  // Guard transforms during external drag (unchanged)
+  draggableCardsRoot?.addEventListener('dragstart', () => {
+    document.body.classList.add('no-transform-during-drag');
+  });
+  draggableCardsRoot?.addEventListener('dragend', () => {
+    document.body.classList.remove('no-transform-during-drag');
+  });
+
+  // Ensure we don’t leak listeners if you re-init a lot
+  // Return a small disposer you can call before re-init if you want (optional)
+  return () => {
+    try { draggable?.destroy(); } catch (_) {}
+    mo.disconnect();
+    window.removeEventListener('pointermove', onPointerMove, { passive: true });
+    if (rafId) cancelAnimationFrame(rafId);
+  };
 }
 
   /* ===========================
