@@ -1023,10 +1023,10 @@ body.multi-dragging { cursor: grabbing; }
   }
 }
 
-/* While dragging, neutralize transforms that can skew hit-testing */
-.no-transform-during-drag *:not(.drag-ghost) {
+/* Limit transform neutralization to the calendar content only */
+.no-transform-during-drag #calendar *:not(.drag-ghost) {
   transform: none !important;
-  transition: none !important;  /* added */
+  transition: none !important;
 }
 /* --- FINAL FIX: Sidebar Dual Scroll --- */
 .executive-sidebar {
