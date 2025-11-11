@@ -780,60 +780,72 @@ if (conflict) {
     calendar.render();
   }
 
-  /* ===========================
-     DRAGGABLE (SIDEBAR) INIT
-  =========================== */
-  function initializeDraggable() {
-    if (!draggableCardsContainer) return;
-    if (draggable) { try { draggable.destroy(); } catch (e) {} }
+/* ===========================
+   DRAGGABLE (SIDEBAR) INIT
+=========================== */
+function initializeDraggable() {
+  if (!draggableCardsContainer) return;
+  if (draggable) { try { draggable.destroy(); } catch (e) {} }
 
-    try {
-      draggable = new FullCalendar.Draggable(draggableCardsContainer, {
-        itemSelector: '.fc-event-pill',
-        eventData: function (eventEl) {
-          try {
-            if (!eventEl._fcEventDataTemplate) {
-              const raw = eventEl.getAttribute('data-event');
-              eventEl._fcEventDataTemplate = raw ? JSON.parse(raw) : null;
-            }
-            const template = eventEl._fcEventDataTemplate;
-            if (!template) return null;
-
-            // FIX: deep clone for every drop to isolate objects
-            const parsed = JSON.parse(JSON.stringify(template));
-            // assign a unique temp id to prevent shared id
-            const uid = `evt_${Date.now()}_${Math.random().toString(36).slice(2,6)}`;
-            parsed.id = parsed.id || uid;
-            if (parsed.extendedProps) parsed.extendedProps.id = parsed.extendedProps.id || uid;
-
-            const t = parsed.extendedProps && parsed.extendedProps.type ? parsed.extendedProps.type : '';
-            const classSet = new Set(parsed.classNames || []);
-            classSet.add('fc-event-pill');
-            if (t === 'rest') classSet.add('fc-event-rest'); else classSet.add('fc-event-work');
-            parsed.classNames = Array.from(classSet);
-            return parsed;
-          } catch (err) {
-            console.error('Invalid event data on draggable element', err);
-            return null;
+  try {
+    draggable = new FullCalendar.Draggable(draggableCardsContainer, {
+      itemSelector: '.fc-event-pill',
+      eventData: function (eventEl) {
+        try {
+          if (!eventEl._fcEventDataTemplate) {
+            const raw = eventEl.getAttribute('data-event');
+            eventEl._fcEventDataTemplate = raw ? JSON.parse(raw) : null;
           }
+          const template = eventEl._fcEventDataTemplate;
+          if (!template) return null;
+
+          // FIX: deep clone for every drop to isolate objects
+          const parsed = JSON.parse(JSON.stringify(template));
+          // assign a unique temp id to prevent shared id
+          const uid = `evt_${Date.now()}_${Math.random().toString(36).slice(2,6)}`;
+          parsed.id = parsed.id || uid;
+          if (parsed.extendedProps) parsed.extendedProps.id = parsed.extendedProps.id || uid;
+
+          const t = parsed.extendedProps && parsed.extendedProps.type ? parsed.extendedProps.type : '';
+          const classSet = new Set(parsed.classNames || []);
+          classSet.add('fc-event-pill');
+          if (t === 'rest') classSet.add('fc-event-rest'); else classSet.add('fc-event-work');
+          parsed.classNames = Array.from(classSet);
+          return parsed;
+        } catch (err) {
+          console.error('Invalid event data on draggable element', err);
+          return null;
         }
-      });
-    } catch (err) { console.warn('initializeDraggable error', err); }
+      },
+      dragScroll: false // ✅ Prevent ghost jumping, but disables scroll globally
+    });
 
-    // Cosmetic lift while dragging inside calendar
-    if (calendar && typeof calendar.on === 'function') {
-      calendar.on('eventDragStart', function(info) {
-        info.el.style.transform = 'translateY(-4px)';
-      });
-      calendar.on('eventDragStop', function(info) {
-        info.el.style.transform = 'translateY(0)';
-      });
-    }
+    // ✅ FIX: Re-enable scroll in the draggable sidebar container
+    draggableCardsContainer.addEventListener('wheel', (e) => e.stopPropagation(), { passive: true });
+    draggableCardsContainer.addEventListener('touchmove', (e) => e.stopPropagation(), { passive: true });
 
-    // Also guard against transforms during external HTML5 drag
-    draggableCardsRoot?.addEventListener('dragstart', () => { document.body.classList.add('no-transform-during-drag'); });
-    draggableCardsRoot?.addEventListener('dragend',   () => { document.body.classList.remove('no-transform-during-drag'); });
+  } catch (err) {
+    console.warn('initializeDraggable error', err);
   }
+
+  // Cosmetic lift while dragging inside calendar
+  if (calendar && typeof calendar.on === 'function') {
+    calendar.on('eventDragStart', function(info) {
+      info.el.style.transform = 'translateY(-4px)';
+    });
+    calendar.on('eventDragStop', function(info) {
+      info.el.style.transform = 'translateY(0)';
+    });
+  }
+
+  // Also guard against transforms during external HTML5 drag
+  draggableCardsRoot?.addEventListener('dragstart', () => { 
+    document.body.classList.add('no-transform-during-drag'); 
+  });
+  draggableCardsRoot?.addEventListener('dragend', () => { 
+    document.body.classList.remove('no-transform-during-drag'); 
+  });
+}
 
   /* ===========================
      EMPLOYEE TABLE UI (kept)
