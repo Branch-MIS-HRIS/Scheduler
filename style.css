@@ -1090,6 +1090,10 @@ body.multi-dragging { cursor: grabbing; }
   -webkit-overflow-scrolling: touch;
 }
 
+.executive-sidebar .draggable-scroll > * {
+  flex: 0 0 auto;
+}
+
 .executive-sidebar .draggable-scroll::-webkit-scrollbar {
   width: 6px;
 }
