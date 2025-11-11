@@ -1028,17 +1028,51 @@ body.multi-dragging { cursor: grabbing; }
   transform: none !important;
   transition: none !important;  /* added */
 }
-/* --- Sidebar Scroll Fix --- */
+/* --- Sidebar Split Scroll Zones --- */
 .executive-sidebar {
-  overflow: hidden !important; /* prevent double scrollbars */
+  overflow: hidden !important;
   display: flex;
   flex-direction: column;
 }
 
+/* Employees Section */
+.executive-sidebar > .data-surface:first-of-type {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-height: 0;
+}
+
+#employee-table-body {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  min-height: 0;
+  padding-right: 6px;
+}
+
+#employee-table-body::-webkit-scrollbar {
+  width: 6px;
+}
+#employee-table-body::-webkit-scrollbar-thumb {
+  background: rgba(148,163,184,0.35);
+  border-radius: 999px;
+}
+
+/* Keep the bottom buttons visible */
+.executive-sidebar #save-generate-btn {
+  position: sticky;
+  bottom: 0;
+  z-index: 5;
+}
+
+/* Draggable Cards Section */
 .executive-sidebar > .data-surface.subtle-surface {
   flex: 1;
   display: flex;
   flex-direction: column;
+  min-height: 0; /* enables proper flex scrolling */
 }
 
 #draggable-cards-container {
@@ -1046,16 +1080,19 @@ body.multi-dragging { cursor: grabbing; }
   overflow-y: auto;
   overflow-x: hidden;
   padding-right: 6px;
-  margin-top: 6px;
   scrollbar-width: thin;
   scrollbar-color: rgba(148,163,184,0.35) transparent;
 }
-
 #draggable-cards-container::-webkit-scrollbar {
   width: 6px;
 }
 #draggable-cards-container::-webkit-scrollbar-thumb {
   background: rgba(148,163,184,0.35);
   border-radius: 999px;
+}
+button#save-generate-btn {
+  position: sticky;
+  bottom: 10px;
+  background: linear-gradient(135deg, var(--primary), var(--primary-600));
 }
 
