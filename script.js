@@ -315,6 +315,10 @@ function getDateUnderPointer() {
   let copiedEmployeeNo = null;
   let copiedEmployeeData = null;
   let calendar, draggable;
+  let __sidebarDragListenersWired = false;
+  let __calendarDragLiftWired = false;
+  let __bodyDragGuardsWired = false;
+  let __isSidebarDragging = false;
   let currentDroppingEvent = null;
   let currentDeletingEvent = null;
   let isEditingExistingEvent = false;
@@ -783,13 +787,21 @@ if (conflict) {
 function initializeDraggable() {
   if (!draggableCardsContainer) return;
 
+  draggableCardsContainer.classList.remove('is-dragging');
+
   // Clean up an existing Draggable instance
   if (draggable) { try { draggable.destroy(); } catch (e) {} }
 
   // Wire sidebar drag/scroll listeners ONCE (not inside eventData)
   if (!__sidebarDragListenersWired) {
-    draggableCardsContainer.addEventListener('dragstart', () => { __isSidebarDragging = true; }, { capture: true });
-    draggableCardsContainer.addEventListener('dragend',   () => { __isSidebarDragging = false; }, { capture: true });
+    draggableCardsContainer.addEventListener('dragstart', () => {
+      __isSidebarDragging = true;
+      draggableCardsContainer.classList.add('is-dragging');
+    }, { capture: true });
+    draggableCardsContainer.addEventListener('dragend',   () => {
+      __isSidebarDragging = false;
+      draggableCardsContainer.classList.remove('is-dragging');
+    }, { capture: true });
 
     // When dragging a pill from the sidebar, stop wheel/touchmove bubbling so the calendar doesn't hijack scroll
     draggableCardsContainer.addEventListener('wheel', (e) => {
