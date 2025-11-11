@@ -541,25 +541,35 @@ function getDateUnderPointer() {
   /* ===========================
      CALENDAR INIT
   =========================== */
-  function initializeCalendar() {
-    if (!calendarEl) return;
+function initializeCalendar() {
+  if (!calendarEl) return;
 
-calendar = new FullCalendar.Calendar(calendarEl, {
-  initialView: 'dayGridMonth',
-  editable: true,
-  droppable: true,
-  dragScroll: false,
-  selectable: true,
-  dayMaxEvents: true,
-  height: 'auto',
-  headerToolbar: { left: 'prev,next today', center: 'title', right: 'dayGridMonth,dayGridWeek,dayGridDay' },
+  // ✅ Add this before initializing the calendar
+  const draggableContainer = document.getElementById('draggable-cards-container');
+  if (draggableContainer) {
+    draggableContainer.addEventListener('wheel', (e) => e.stopPropagation());
+  }
 
-  eventDragStart(info) {
-    document.body.classList.add('no-transform-during-drag');
-  },
-  eventDragStop(info) {
-    document.body.classList.remove('no-transform-during-drag');
-  },
+  calendar = new FullCalendar.Calendar(calendarEl, {
+    initialView: 'dayGridMonth',
+    editable: true,
+    droppable: true,
+    dragScroll: false, // Keep this for the calendar only
+    selectable: true,
+    dayMaxEvents: true,
+    height: 'auto',
+    headerToolbar: { 
+      left: 'prev,next today', 
+      center: 'title', 
+      right: 'dayGridMonth,dayGridWeek,dayGridDay' 
+    },
+
+    eventDragStart(info) {
+      document.body.classList.add('no-transform-during-drag');
+    },
+    eventDragStop(info) {
+      document.body.classList.remove('no-transform-during-drag');
+    },
 
       /* -------------------------
          FIXED: eventReceive
