@@ -780,121 +780,94 @@ if (conflict) {
 /* ===========================
    DRAGGABLE (SIDEBAR) INIT
 =========================== */
-
 function initializeDraggable() {
   if (!draggableCardsContainer) return;
 
-  // Tear down any existing instance safely
-  if (draggable) { try { draggable.destroy(); } catch(_) {} draggable = null; }
+  // Clean up an existing Draggable instance
+  if (draggable) { try { draggable.destroy(); } catch (e) {} }
 
-  const container = draggableCardsContainer;
+  // Wire sidebar drag/scroll listeners ONCE (not inside eventData)
+  if (!__sidebarDragListenersWired) {
+    draggableCardsContainer.addEventListener('dragstart', () => { __isSidebarDragging = true; }, { capture: true });
+    draggableCardsContainer.addEventListener('dragend',   () => { __isSidebarDragging = false; }, { capture: true });
 
-  // --- State for sidebar drag + autoscroll
-  let isDraggingFromSidebar = false;
-  let lastPointerY = null;
-  let rafId = null;
+    // When dragging a pill from the sidebar, stop wheel/touchmove bubbling so the calendar doesn't hijack scroll
+    draggableCardsContainer.addEventListener('wheel', (e) => {
+      if (__isSidebarDragging) e.stopPropagation();
+    }, { passive: true });
 
-  const EDGE = 70;      // px from top/bottom to start autoscroll
-  const MAX_SPEED = 22; // px per frame
+    draggableCardsContainer.addEventListener('touchmove', (e) => {
+      if (__isSidebarDragging) e.stopPropagation();
+    }, { passive: true });
 
-  const autoScroll = () => {
-    if (!isDraggingFromSidebar || lastPointerY == null) return;
-    const rect = container.getBoundingClientRect();
-    let delta = 0;
+    __sidebarDragListenersWired = true;
+  }
 
-    if (lastPointerY < rect.top + EDGE) {
-      const d = Math.max(0, EDGE - (lastPointerY - rect.top));
-      delta = -Math.min(MAX_SPEED, (d / EDGE) * MAX_SPEED);
-    } else if (lastPointerY > rect.bottom - EDGE) {
-      const d = Math.max(0, EDGE - (rect.bottom - lastPointerY));
-      delta = Math.min(MAX_SPEED, (d / EDGE) * MAX_SPEED);
-    }
-
-    if (delta) container.scrollTop += delta;
-    rafId = requestAnimationFrame(autoScroll);
-  };
-
-  // Track pointer for autoscroll
-  const onPointerMove = (e) => { lastPointerY = e.clientY; };
-  window.addEventListener('pointermove', onPointerMove, { passive: true });
-
-  // Mark drag start/end based on pointer on a pill (robust for external drag)
-  const startIfPill = (e) => {
-    const pill = e.target && e.target.closest && e.target.closest('.fc-event-pill');
-    if (!pill) return;
-    isDraggingFromSidebar = true;
-    document.body.classList.add('no-transform-during-drag'); // now only affects #calendar due to CSS change
-    if (!rafId) rafId = requestAnimationFrame(autoScroll);
-  };
-  const endDrag = () => {
-    if (!isDraggingFromSidebar) return;
-    isDraggingFromSidebar = false;
-    document.body.classList.remove('no-transform-during-drag');
-    lastPointerY = null;
-    if (rafId) cancelAnimationFrame(rafId);
-    rafId = null;
-  };
-
-  // Pointer is the most reliable across mouse/touch
-  container.addEventListener('pointerdown', startIfPill, { capture: true });
-  window.addEventListener('pointerup', endDrag, { capture: true });
-  window.addEventListener('pointercancel', endDrag, { capture: true });
-
-  // While dragging, keep sidebar scroll events from bubbling to the calendar
-  container.addEventListener('wheel', (e) => { if (isDraggingFromSidebar) e.stopPropagation(); }, { passive: true });
-  container.addEventListener('touchmove', (e) => { if (isDraggingFromSidebar) e.stopPropagation(); }, { passive: true });
-
-  // Build the external Draggable
+  // Create a fresh Draggable (listeners above are now outside eventData)
   try {
-    draggable = new FullCalendar.Draggable(container, {
+    draggable = new FullCalendar.Draggable(draggableCardsContainer, {
       itemSelector: '.fc-event-pill',
-      dragScroll: false,          // calendar autoscroll off; we manage sidebar scroll
-      mirrorParent: document.body, // keeps mirror stable even with overflow/positioned parents
-
       eventData(eventEl) {
-        // Parse once & deep-clone each time
-        if (!eventEl._fcEventDataTemplate) {
-          const raw = eventEl.getAttribute('data-event');
-          eventEl._fcEventDataTemplate = raw ? JSON.parse(raw) : null;
+        try {
+          // Cache + deep clone template payload
+          if (!eventEl._fcEventDataTemplate) {
+            const raw = eventEl.getAttribute('data-event');
+            eventEl._fcEventDataTemplate = raw ? JSON.parse(raw) : null;
+          }
+          const template = eventEl._fcEventDataTemplate;
+          if (!template) return null;
+
+          const parsed = JSON.parse(JSON.stringify(template));
+
+          // Unique id per drop to prevent collisions
+          const uid = `evt_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+          parsed.id = parsed.id || uid;
+          if (parsed.extendedProps) parsed.extendedProps.id = parsed.extendedProps.id || uid;
+
+          // Ensure consistent pill classes based on type
+          const t = parsed.extendedProps?.type || 'work';
+          const classSet = new Set(parsed.classNames || []);
+          classSet.add('fc-event-pill');
+          classSet.add(t === 'rest' ? 'fc-event-rest' : 'fc-event-work');
+          parsed.classNames = Array.from(classSet);
+
+          return parsed;
+        } catch (err) {
+          console.error('Invalid event data on draggable element', err);
+          return null;
         }
-        const template = eventEl._fcEventDataTemplate;
-        if (!template) return null;
-
-        const parsed = JSON.parse(JSON.stringify(template));
-        const uid = `evt_${Date.now()}_${Math.random().toString(36).slice(2,6)}`;
-        parsed.id = parsed.id || uid;
-        if (parsed.extendedProps) parsed.extendedProps.id = parsed.extendedProps.id || uid;
-
-        const t = parsed.extendedProps?.type || '';
-        const classSet = new Set(parsed.classNames || []);
-        classSet.add('fc-event-pill');
-        classSet.add(t === 'rest' ? 'fc-event-rest' : 'fc-event-work');
-        parsed.classNames = Array.from(classSet);
-
-        return parsed;
-      }
+      },
+      // Keep calendar from auto-scrolling the page while dragging from the sidebar
+      dragScroll: false
     });
   } catch (err) {
     console.warn('initializeDraggable error', err);
   }
 
-  // Nice lift inside calendar (kept)
-  if (calendar && typeof calendar.on === 'function') {
-    calendar.on('eventDragStart', (info) => { info.el.style.transform = 'translateY(-4px)'; });
-    calendar.on('eventDragStop',  (info) => { info.el.style.transform = 'translateY(0)'; });
+  // Cosmetic lift while dragging inside the calendar — wire once
+  if (calendar && typeof calendar.on === 'function' && !__calendarDragLiftWired) {
+    calendar.on('eventDragStart', function (info) {
+      info.el.style.transform = 'translateY(-4px)';
+    });
+    calendar.on('eventDragStop', function (info) {
+      info.el.style.transform = 'translateY(0)';
+    });
+    __calendarDragLiftWired = true;
   }
 
-  // Cleanup helper if you ever need to dispose
-  return () => {
-    try { draggable?.destroy(); } catch(_) {}
-    window.removeEventListener('pointermove', onPointerMove, { passive: true });
-    window.removeEventListener('pointerup', endDrag, { capture: true });
-    window.removeEventListener('pointercancel', endDrag, { capture: true });
-    if (rafId) cancelAnimationFrame(rafId);
-  };
+  // Guard against body transforms during external HTML5 drag — wire once
+  if (!__bodyDragGuardsWired) {
+    draggableCardsRoot?.addEventListener('dragstart', () => {
+      document.body.classList.add('no-transform-during-drag');
+    });
+    draggableCardsRoot?.addEventListener('dragend', () => {
+      document.body.classList.remove('no-transform-during-drag');
+    });
+    __bodyDragGuardsWired = true;
+  }
 }
 
-/* ===========================
+  /* ===========================
      EMPLOYEE TABLE UI (kept)
   =========================== */
   function addEmployeeRow() {
