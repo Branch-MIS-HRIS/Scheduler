@@ -1073,7 +1073,8 @@ body.multi-dragging { cursor: grabbing; }
   display: flex;
   flex-direction: column;
   min-height: 0;
-  overflow: hidden;
+  /* allow the child (#draggable-cards-container) to handle scrolling itself */
+  overflow: visible;
 }
 
 #draggable-cards-container {
@@ -1102,6 +1103,19 @@ body.multi-dragging { cursor: grabbing; }
   cursor: grab;
 }
 #draggable-cards-container .fc-event-pill:active {
+  cursor: grabbing;
+}
+/* Make pills draggable without text selection fighting the pointer */
+#draggable-cards-container .fc-event-pill,
+#draggable-cards-container .schedule-pill {
+  cursor: grab;
+  touch-action: pan-y;     /* allow vertical scroll gestures */
+  -webkit-user-drag: none;
+  user-select: none;
+}
+
+#draggable-cards-container .fc-event-pill:active,
+#draggable-cards-container .schedule-pill:active {
   cursor: grabbing;
 }
 
