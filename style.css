@@ -1202,7 +1202,7 @@ body.multi-dragging { cursor: grabbing; }
 #calendar .fc .fc-timegrid-event.fc-event-rest::after {
   content: "REST";
   position: absolute;
-  right: 20px;
+  right: 40px;
   top: 50%;
   transform: translateY(-50%);
   color: var(--danger);
