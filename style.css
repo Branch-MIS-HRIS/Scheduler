@@ -1280,3 +1280,40 @@ body.multi-dragging { cursor: grabbing; }
 #draggable-cards-container .schedule-pill::after {
   content: none !important;
 }
+/* --- FIX: Sidebar Work/Rest chip center text (no calendar impact) --- */
+#draggable-cards-container .pill-content {
+  display: flex;                /* ensure row is flex so margin-left:auto works */
+  align-items: center;
+}
+
+#draggable-cards-container .pill-shift,
+#draggable-cards-container .schedule-pill {
+  /* keep chip at far right, but center its label */
+  margin-left: auto !important;       /* park chip right */
+  display: inline-grid !important;    /* defeat any inherited flex */
+  place-items: center !important;     /* center label H/V */
+  width: max-content !important;      /* stop stretch */
+  min-width: 56px !important;
+  height: 28px !important;
+  line-height: 28px !important;
+  padding: 0 12px !important;
+  border-radius: 999px !important;
+
+  /* overwrite earlier text-right/indent/spacing */
+  text-align: center !important;
+  text-indent: 0 !important;
+  letter-spacing: 0 !important;
+  gap: 0 !important;
+}
+
+/* kill any inner spacing that nudges the text */
+#draggable-cards-container .pill-shift > *,
+#draggable-cards-container .schedule-pill > * {
+  display: block;
+  margin: 0 !important;
+  padding: 0 !important;
+}
+
+/* ensure the calendar-only REST ribbon never appears in sidebar */
+#draggable-cards-container .fc-event-rest::after { content: none !important; }
+
