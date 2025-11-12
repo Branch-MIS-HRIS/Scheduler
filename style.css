@@ -1232,3 +1232,39 @@ body.multi-dragging { cursor: grabbing; }
 .fc .fc-event.fc-event-rest .pill-shift {
   display: none !important;
 }
+/* === Calendar-only REST tag (right side) === */
+#calendar .fc .fc-event.fc-event-rest {
+  position: relative;
+  padding-right: 72px !important; /* room for the tag */
+}
+
+#calendar .fc .fc-event.fc-event-rest::after {
+  content: "REST";
+  position: absolute;
+  right: 20px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--danger);
+  font-weight: 800;
+  letter-spacing: 1px;
+  pointer-events: none;
+  z-index: 2;
+}
+
+/* Keep the employee name readable on REST pills (calendar only) */
+#calendar .fc .fc-event.fc-event-rest .pill-name {
+  color: #fff !important;
+}
+
+/* If any earlier rule tries to auto-insert REST inside .pill-shift, cancel it */
+#calendar .fc .fc-event[data-type="rest"] .pill-shift:empty::after {
+  content: "" !important;
+}
+
+/* === Guardrails: DO NOT show REST tag in the sidebar pills === */
+#draggable-cards-container .fc-event-rest {
+  padding-right: 0 !important;
+}
+#draggable-cards-container .fc-event-rest::after {
+  content: none !important;
+}
