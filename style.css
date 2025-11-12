@@ -725,11 +725,33 @@ tbody tr td:first-child {
   position: relative;           /* allows right-side label to align */
 }
 /* Color the right-side label for REST */
-.fc-event-rest .pill-shift {
+/* Color the right-side label for REST (by data attribute) */
+.fc-event[data-type="rest"] .pill-shift {
+  /* If there's no shift text, auto-append REST */
+.fc-event[data-type="rest"] .pill-shift:empty::after {
+  content: "REST";
+}
   color: var(--danger);         /* red */
   font-weight: 800;
   letter-spacing: 1px;
 }
+/* Keep employee name white on REST pills */
+.fc-event-rest .pill-name { color: #fff !important; }
+/* Make sure REST label shows on the right for rest pills */
+.fc-event-rest { position: relative; padding-right: 72px; } /* you already have this; safe to keep/duplicate */
+.fc-event-rest .pill-rest {
+  position: absolute;
+  right: 20px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--danger);
+  font-weight: 800;
+  letter-spacing: 1px;
+  pointer-events: none;
+  z-index: 2;
+}
+
+
 
 
 /* Hover effects */

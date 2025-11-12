@@ -805,10 +805,13 @@ eventResizeStop(info)  { document.body.classList.remove('no-transform-during-dra
     },
 
     eventContent(arg) {
-      const { shiftCode } = arg.event.extendedProps;
-      const shiftHtml = shiftCode ? `<span class="pill-shift">${shiftCode}</span>` : '';
-      return { html: `<div class="pill-content"><span class="pill-name">${arg.event.title}</span>${shiftHtml}</div>` };
-    },
+  const { shiftCode, type } = arg.event.extendedProps;
+  const shiftHtml = shiftCode ? `<span class="pill-shift">${shiftCode}</span>` : '';
+  const restHtml  = type === 'rest' ? `<span class="pill-rest">REST</span>` : ''; // <-- add this
+  return {
+    html: `<div class="pill-content"><span class="pill-name">${arg.event.title}</span>${shiftHtml}${restHtml}</div>`
+  };
+},
 
     dayCellClassNames(arg) {
       if (arg.date.getDay() === 0 || arg.date.getDay() === 6) return 'fc-day-sat-sun';
