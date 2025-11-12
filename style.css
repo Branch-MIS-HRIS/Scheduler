@@ -1323,5 +1323,36 @@ body.multi-dragging { cursor: grabbing; }
   background: rgba(37,99,235,.18);
   -webkit-text-fill-color: #0b2a7a;
 }
+/* === Schedule Cards: hard-center the mini badges (Work/Rest) === */
+#draggable-cards-container .schedule-pill,
+#draggable-cards-container .pill-shift,
+#draggable-cards-container .pill-rest,      /* in case the badge uses this */
+#draggable-cards-container [data-role="shift-badge"] {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  text-align: center !important;
+
+  /* make the bubble symmetric */
+  height: 28px !important;
+  line-height: 28px !important;
+  padding: 0 12px !important;
+  min-width: 56px;                 /* keeps circle/rounded look with centered text */
+  width: auto !important;
+  gap: 0 !important;
+  letter-spacing: 0 !important;    /* avoid optical shift */
+}
+
+/* Nuke any inner spacing that pushes text left */
+#draggable-cards-container .schedule-pill > *,
+#draggable-cards-container .pill-shift > *,
+#draggable-cards-container .pill-rest > * {
+  margin: 0 !important;
+}
+
+/* Make sure no calendar-only REST tag logic leaks into sidebar */
+#draggable-cards-container .fc-event-rest { padding-right: 0 !important; }
+#draggable-cards-container .fc-event-rest::after { content: none !important; }
+#draggable-cards-container .fc-event[data-type="rest"] .pill-shift:empty::after { content: "" !important; }
 
 
