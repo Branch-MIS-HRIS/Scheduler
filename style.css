@@ -1228,4 +1228,82 @@ body.multi-dragging { cursor: grabbing; }
 #draggable-cards-container .schedule-pill.fc-event-rest::after {
   content: none !important;
 }
+/* === Sidebar Schedule Cards: center the Work/Rest mini-pills === */
+#draggable-cards-container .pill-shift {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+
+  /* make the bubble symmetric so text sits dead-center */
+  height: 26px !important;        /* tweak if you want smaller/larger */
+  padding: 0 12px !important;
+  border-radius: 999px !important;
+  line-height: 26px !important;    /* matches height for perfect vertical align */
+  gap: 0 !important;
+  letter-spacing: 0 !important;
+}
+
+/* keep calendar-only REST tag from leaking into sidebar pills */
+#draggable-cards-container .fc-event-rest { padding-right: 0 !important; }
+#draggable-cards-container .fc-event-rest::after { content: none !important; }
+#draggable-cards-container .fc-event[data-type="rest"] .pill-shift:empty::after { content: "" !important; }
+
+  /* Powermac-style brand blues */
+  :root{
+    --brand-blue-900:#0B2A7A; /* deep base */
+    --brand-blue-700:#1E40AF; /* indigo-ish */
+    --brand-blue-600:#2563EB; /* button blue */
+    --brand-blue-400:#3B82F6; /* bright */
+    --brand-blue-300:#60A5FA; /* light accent */
+  }
+
+  /* Title skin tuned for glassy headers */
+  .tp-title--brand {
+    /* keep your Inter var features from .tp-title */
+    letter-spacing:-0.02em;
+    background: linear-gradient(
+      90deg,
+      var(--brand-blue-900) 0%,
+      var(--brand-blue-700) 22%,
+      var(--brand-blue-600) 55%,
+      var(--brand-blue-300) 100%
+    );
+    -webkit-background-clip:text;
+    background-clip:text;
+    color: transparent;
+
+    /* survive frosted/light backgrounds */
+    text-shadow:
+      0 1px 0 rgba(255,255,255,.35),   /* subtle light edge for glass */
+      0 1px 1px rgba(0,0,0,.35);       /* soft drop for contrast */
+    /* optional hairline stroke (WebKit) */
+    -webkit-text-stroke: .35px rgba(255,255,255,.28);
+  }
+
+  /* Dark mode tweak: lighten and drop the white stroke */
+  @media (prefers-color-scheme: dark){
+    .tp-title--brand{
+      text-shadow:
+        0 1px 0 rgba(0,0,0,.25),
+        0 1px 1px rgba(0,0,0,.45);
+      -webkit-text-stroke: .2px rgba(0,0,0,.25);
+      background: linear-gradient(
+        90deg,
+        #93C5FD 0%,
+        #60A5FA 40%,
+        #3B82F6 70%,
+        #2563EB 100%
+      );
+    }
+  }
+
+  /* High-contrast users: fall back to solid */
+  @media (prefers-contrast: more){
+    .tp-title--brand{
+      color: var(--brand-blue-700);
+      background: none !important;
+      -webkit-text-stroke: 0 !important;
+      text-shadow: 0 1px 1px rgba(0,0,0,.5);
+    }
+  }
 
