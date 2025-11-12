@@ -1211,4 +1211,21 @@ body.multi-dragging { cursor: grabbing; }
 #draggable-cards-container .fc-event[data-type="rest"] .pill-shift:empty::after {
   content: "" !important;
 }
+/* === Fix: center the mini pills inside Schedule Cards only === */
+#draggable-cards-container .schedule-pill {
+  justify-content: center !important;   /* center the text */
+  align-items: center !important;
+  padding: 4px 12px !important;         /* symmetric padding */
+  gap: 0 !important;                    /* no extra spacing */
+  line-height: 1 !important;            /* tidy vertical centering */
+  letter-spacing: 0 !important;         /* avoid optical shift */
+}
+
+/* Ensure no calendar REST tag styles leak into sidebar pills */
+#draggable-cards-container .schedule-pill.fc-event-rest {
+  padding-right: 12px !important;       /* cancel any reserved tag space */
+}
+#draggable-cards-container .schedule-pill.fc-event-rest::after {
+  content: none !important;
+}
 
