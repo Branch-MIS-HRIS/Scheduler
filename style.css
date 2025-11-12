@@ -1190,6 +1190,15 @@ body.multi-dragging { cursor: grabbing; }
   z-index: 2;
 }
 
+/* Ensure calendar work-pill names are always visible */
+#calendar .fc .fc-event.fc-event-work .pill-name {
+  color: #fff !important;
+  -webkit-text-fill-color: #fff !important;
+}
+
+/* Keep REST badge as a calendar-only visual (already used via ::after),
+   and avoid adding extra DOM-based REST labels that would shift layout. */
+
 /* Keep the employee name readable on REST pills (calendar only) */
 #calendar .fc .fc-event.fc-event-rest .pill-name {
   color: #fff !important;
