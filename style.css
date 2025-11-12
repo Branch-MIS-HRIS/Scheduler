@@ -1377,3 +1377,51 @@ body.multi-dragging { cursor: grabbing; }
   display: inline-block !important;
 }
 
+/* ===== Calendar-only: fixed REST badge; keep sidebar chips intact ===== */
+
+/* Ensure calendar pills are left-aligned and can reserve space for the REST badge */
+#calendar .fc .fc-event-pill {
+  justify-content: flex-start !important;
+}
+
+/* Make pill content positioned so the REST label can be absolutely positioned inside calendar events */
+#calendar .fc .fc-event-pill .pill-content {
+  position: relative;
+  padding-right: 84px; /* reserve room for the REST badge */
+  min-width: 0;
+}
+
+/* Allow names in calendar pills to shrink/ellipsis so short names won't re-center badge */
+#calendar .fc .fc-event-pill .pill-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Position the "REST" chip at a fixed spot on the right inside calendar events */
+#calendar .fc .fc-event-pill.fc-event-rest .pill-shift,
+#calendar .fc .fc-event-pill[data-type="rest"] .pill-shift {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: inline-block;
+  white-space: nowrap;
+  font-weight: 800;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  pointer-events: none;
+}
+
+/* Explicitly keep sidebar/draggable cards chips in normal (static) flow */
+#draggable-cards-container .pill-shift,
+#draggable-cards-container .schedule-pill,
+#draggable-cards-container .fc-event-pill .pill-shift {
+  position: static !important;
+  right: auto !important;
+  top: auto !important;
+  transform: none !important;
+}
+
