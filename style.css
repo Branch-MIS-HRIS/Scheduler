@@ -1187,20 +1187,30 @@ body.multi-dragging { cursor: grabbing; }
   z-index: 2;
 }
 
-/* Keep the employee name readable on REST pills (calendar only) */
-#calendar .fc .fc-event.fc-event-rest .pill-name {
-  color: #fff !important;
+/* Fix: ensure REST ribbon only appears in calendar; never on sidebar cards */
+#draggable-cards-container .fc-event.fc-event-rest::after,
+#draggable-cards-container .fc-event[data-type="rest"]::after,
+#draggable-cards-container .pill-rest,
+#draggable-cards-container .pill-shift.pill-rest {
+  content: none !important;
+  display: none !important;
+  pointer-events: none !important;
 }
 
-/* If any earlier rule tries to auto-insert REST inside .pill-shift, cancel it (calendar only) */
-#calendar .fc .fc-event[data-type="rest"] .pill-shift:empty::after {
-  content: "" !important;
+/* Narrow the calendar-only REST ribbon to actual calendar event nodes */
+#calendar .fc .fc-daygrid-event.fc-event-rest::after,
+#calendar .fc .fc-timegrid-event.fc-event-rest::after {
+  content: "REST";
+  position: absolute;
+  right: 20px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--danger);
+  font-weight: 800;
+  letter-spacing: 1px;
+  pointer-events: none;
+  z-index: 2;
 }
-
-/* === Guardrails: DO NOT show REST tag in the sidebar pills (keep one set only) === */
-#draggable-cards-container .fc-event-rest { padding-right: 0 !important; }
-#draggable-cards-container .fc-event-rest::after { content: none !important; }
-#draggable-cards-container .fc-event[data-type="rest"] .pill-shift:empty::after { content: "" !important; }
 
 /* ---------- Brand Title (merged single selector) ---------- */
 .tp-title--brand {
