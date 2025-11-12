@@ -290,8 +290,8 @@ function getDateUnderPointer() {
   }
 
   // Position lists + presets
-  const positionOptions = ['Branch Head','Site Supervisor','OIC','Mac Expert','Cashier'];
-  const managerPositions = ['Branch Head','Site Supervisor','OIC'];
+  const positionOptions = ['Branch Head','Site Supervisor','OIC','Mac Expert','Cashier','Inventory Analyst','Area Manager'];
+  const managerPositions = ['Branch Head','Site Supervisor','OIC','Area Manager'];
   const shiftPresets = [ /* (kept) */ 
     'RBG-001','RBG-002','RBG-003','RBG-004','RBG-005','RBG-006','RBG-007','RBG-008','RBG-009','RBG-010',
     'RBG-011','RBG-012','RBG-013','RBG-014','RBG-015','RBG-016','RBG-017','RBG-018','RBG-019','RBG-020',
