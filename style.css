@@ -718,11 +718,15 @@ tbody tr td:first-child {
   color: white;
   border: none;
 }
-.fc-event-pill.fc-event-rest, .schedule-pill.fc-event-rest {
+/* Work / Rest Pill Colors */
+.fc-event-pill.fc-event-rest,
+.schedule-pill.fc-event-rest {
   background: linear-gradient(90deg, #ef4444, #fb7185);
   color: white;
-  border: #ef4444;
+  /* was: border: #ef4444; */
+  border: 2px solid #ef4444;   /* <- make the border red */
 }
+
 
 /* Hover effects */
 .fc-event-pill:hover, .schedule-pill:hover {
