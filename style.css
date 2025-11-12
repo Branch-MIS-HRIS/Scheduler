@@ -1239,7 +1239,7 @@ body.multi-dragging { cursor: grabbing; }
   padding: 0 12px !important;
   border-radius: 999px !important;
   line-height: 26px !important;    /* matches height for perfect vertical align */
-  gap: 0 !important;
+  gap: 0 !important;                    /* no extra spacing */
   letter-spacing: 0 !important;
 }
 
@@ -1351,38 +1351,6 @@ body.multi-dragging { cursor: grabbing; }
 }
 
 /* Make sure no calendar-only REST tag logic leaks into sidebar */
-#draggable-cards-container .fc-event-rest { padding-right: 0 !important; }
-#draggable-cards-container .fc-event-rest::after { content: none !important; }
-#draggable-cards-container .fc-event[data-type="rest"] .pill-shift:empty::after { content: "" !important; }
-/* === Schedule Cards: perfectly center the mini "Work/Rest" badges === */
-#draggable-cards-container .schedule-pill,
-#draggable-cards-container .pill-shift {
-  display: grid !important;          /* ignore inherited flex */
-  place-items: center !important;    /* center both axes */
-  text-align: center !important;
-
-  /* symmetric bubble so text sits dead-center */
-  height: 28px !important;
-  line-height: 28px !important;
-  padding: 0 12px !important;
-  min-width: 56px !important;
-  border-radius: 999px !important;
-  gap: 0 !important;
-  letter-spacing: 0 !important;
-}
-
-/* Remove any decorative pseudo that could shift content */
-#draggable-cards-container .schedule-pill::before,
-#draggable-cards-container .schedule-pill::after {
-  content: none !important;
-}
-
-/* Nuke leftover margins that push the label inside the chip */
-#draggable-cards-container .pill-shift { margin-left: 0 !important; }
-#draggable-cards-container .schedule-pill > *,
-#draggable-cards-container .pill-shift > * { margin: 0 !important; }
-
-/* Keep calendar-only REST tag rules from leaking into sidebar */
 #draggable-cards-container .fc-event-rest { padding-right: 0 !important; }
 #draggable-cards-container .fc-event-rest::after { content: none !important; }
 

@@ -805,13 +805,13 @@ eventResizeStop(info)  { document.body.classList.remove('no-transform-during-dra
     },
 
     eventContent(arg) {
-  const { shiftCode, type } = arg.event.extendedProps;
-  const shiftHtml = shiftCode ? `<span class="pill-shift">${shiftCode}</span>` : '';
-  const restHtml  = type === 'rest' ? `<span class="pill-rest">REST</span>` : ''; // <-- add this
-  return {
-    html: `<div class="pill-content"><span class="pill-name">${arg.event.title}</span>${shiftHtml}${restHtml}</div>`
-  };
-},
+      const { shiftCode } = arg.event.extendedProps || {};
+      const shiftHtml = shiftCode ? `<span class="pill-shift">${escapeHtml(shiftCode)}</span>` : '';
+      // NOTE: do NOT inject a .pill-rest DOM node here — we use the calendar-only ::after CSS badge
+      return {
+        html: `<div class="pill-content"><span class="pill-name">${escapeHtml(arg.event.title)}</span>${shiftHtml}</div>`
+      };
+    },
 
     dayCellClassNames(arg) {
       if (arg.date.getDay() === 0 || arg.date.getDay() === 6) return 'fc-day-sat-sun';
@@ -1132,7 +1132,7 @@ function finalizeSidebarEventDrop(newEvent) {
 
     pruneEmployeeColors(Object.keys(employees));
 
-    Object.values(employees).forEach(emp => {
+    Object.values(employees).forEach emp => {
       const color = ensureEmployeeColor(emp.empNo);
       const workGradient = getGradientFromBaseColor(color, 'work');
       const restGradient = getGradientFromBaseColor(color, 'rest');
