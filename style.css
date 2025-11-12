@@ -731,43 +731,12 @@ tbody tr td:first-child {
   font-weight: 800;
   letter-spacing: 1px;
 }
-/* If there's no shift text, auto-append REST inside the shift slot */
-.fc-event[data-type="rest"] .pill-shift:empty::after {
-  content: "REST";
-}
 /* Avoid duplicate visual label when global tag is shown */
 .fc-event[data-type="rest"] .pill-shift:empty { display: none; }
 
 /* Keep employee name white on REST pills */
 .fc-event-rest .pill-name { color: #fff !important; }
 
-/* Make sure REST label shows on the right for rest pills */
-.fc-event-rest { position: relative; padding-right: 72px; } /* space for tag */
-.fc-event-rest .pill-rest {
-  position: absolute;
-  right: 20px;
-  top: 50%;
-  transform: translateY(-50%);
-  color: var(--danger);
-  font-weight: 800;
-  letter-spacing: 1px;
-  pointer-events: none;
-  z-index: 2;
-}
-
-/* === Global right-side REST tag on every rest pill === */
-.fc-event-rest::after {
-  content: "REST";
-  position: absolute;
-  right: 20px;
-  top: 50%;
-  transform: translateY(-50%);
-  color: var(--danger);
-  font-weight: 800;
-  letter-spacing: 1px;
-  pointer-events: none;
-  z-index: 2;
-}
 
 /* Hover effects */
 .fc-event-pill:hover, .schedule-pill:hover {
@@ -1201,37 +1170,7 @@ body.multi-dragging { cursor: grabbing; }
   transform: none !important;
   transition: none !important;  /* added */
 }
-/* === Calendar-only REST label (does NOT affect sidebar) === */
 
-/* Reserve space for the REST tag on calendar events */
-.fc .fc-event.fc-event-rest {
-  position: relative;
-  padding-right: 72px !important;
-}
-
-/* Draw the REST tag on the right side of calendar rest pills */
-.fc .fc-event.fc-event-rest::after {
-  content: "REST";
-  position: absolute;
-  right: 20px;
-  top: 50%;
-  transform: translateY(-50%);
-  color: var(--danger);
-  font-weight: 800;
-  letter-spacing: 1px;
-  pointer-events: none;
-  z-index: 2;
-}
-
-/* Keep the employee name readable on rest pills */
-.fc .fc-event.fc-event-rest .pill-name {
-  color: #fff !important;
-}
-
-/* Avoid duplicate text if a .pill-shift element exists */
-.fc .fc-event.fc-event-rest .pill-shift {
-  display: none !important;
-}
 /* === Calendar-only REST tag (right side) === */
 #calendar .fc .fc-event.fc-event-rest {
   position: relative;
@@ -1268,3 +1207,8 @@ body.multi-dragging { cursor: grabbing; }
 #draggable-cards-container .fc-event-rest::after {
   content: none !important;
 }
+/* Sidebar: cancel the left-side auto "REST" generator */
+#draggable-cards-container .fc-event[data-type="rest"] .pill-shift:empty::after {
+  content: "" !important;
+}
+
