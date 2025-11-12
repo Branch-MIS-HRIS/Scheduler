@@ -718,13 +718,17 @@ tbody tr td:first-child {
   color: white;
   border: none;
 }
-/* Work / Rest Pill Colors */
 .fc-event-pill.fc-event-rest,
 .schedule-pill.fc-event-rest {
-  background: linear-gradient(90deg, #ef4444, #fb7185);
-  color: white;
-  /* was: border: #ef4444; */
-  border: 2px solid #ef4444;   /* <- make the border red */
+  /* keep the employee's own background/color */
+  border: none;                 /* no outline */
+  position: relative;           /* allows right-side label to align */
+}
+/* Color the right-side label for REST */
+.fc-event-rest .pill-shift {
+  color: var(--danger);         /* red */
+  font-weight: 800;
+  letter-spacing: 1px;
 }
 
 
@@ -1003,7 +1007,6 @@ body.multi-dragging { cursor: grabbing; }
   box-shadow: 0 6px 20px rgba(0,0,0,0.1);
 }
 .fc-mirror.fc-event-work { background: linear-gradient(135deg, #2563eb, #3b82f6) !important; }
-.fc-mirror.fc-event-rest { background: linear-gradient(135deg, #ef4444, #fb7185) !important; }
 /* ----- Added: keep mirror compact and aligned with cursor ----- */
 .fc-mirror,
 .fc-mirror .fc-event-main-frame,
