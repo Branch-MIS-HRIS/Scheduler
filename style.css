@@ -1306,4 +1306,22 @@ body.multi-dragging { cursor: grabbing; }
       text-shadow: 0 1px 1px rgba(0,0,0,.5);
     }
   }
+  /* Gradient on glyphs only */
+.tp-title--brand {
+  background-image: linear-gradient(90deg,#0B2A7A 0%, #1E40AF 22%, #2563EB 55%, #60A5FA 100%);
+  background-repeat: no-repeat;
+  background-size: 100% 100%;
+  background-color: transparent !important; /* kill any box bg */
+  -webkit-background-clip: text;  /* Safari/Chrome */
+  background-clip: text;          /* Spec */
+  color: transparent;             /* non-WebKit */
+  -webkit-text-fill-color: transparent; /* Safari needs this */
+}
+
+/* optional: selected text still readable */
+.tp-title--brand::selection {
+  background: rgba(37,99,235,.18);
+  -webkit-text-fill-color: #0b2a7a;
+}
+
 
