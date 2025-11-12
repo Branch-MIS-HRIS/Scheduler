@@ -1201,3 +1201,34 @@ body.multi-dragging { cursor: grabbing; }
   transform: none !important;
   transition: none !important;  /* added */
 }
+/* === Calendar-only REST label (does NOT affect sidebar) === */
+
+/* Reserve space for the REST tag on calendar events */
+.fc .fc-event.fc-event-rest {
+  position: relative;
+  padding-right: 72px !important;
+}
+
+/* Draw the REST tag on the right side of calendar rest pills */
+.fc .fc-event.fc-event-rest::after {
+  content: "REST";
+  position: absolute;
+  right: 20px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--danger);
+  font-weight: 800;
+  letter-spacing: 1px;
+  pointer-events: none;
+  z-index: 2;
+}
+
+/* Keep the employee name readable on rest pills */
+.fc .fc-event.fc-event-rest .pill-name {
+  color: #fff !important;
+}
+
+/* Avoid duplicate text if a .pill-shift element exists */
+.fc .fc-event.fc-event-rest .pill-shift {
+  display: none !important;
+}
