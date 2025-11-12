@@ -1211,42 +1211,6 @@ body.multi-dragging { cursor: grabbing; }
 #draggable-cards-container .fc-event[data-type="rest"] .pill-shift:empty::after {
   content: "" !important;
 }
-/* === Fix: center the mini pills inside Schedule Cards only === */
-#draggable-cards-container .schedule-pill {
-  justify-content: center !important;   /* center the text */
-  align-items: center !important;
-  padding: 4px 12px !important;         /* symmetric padding */
-  gap: 0 !important;                    /* no extra spacing */
-  line-height: 1 !important;            /* tidy vertical centering */
-  letter-spacing: 0 !important;         /* avoid optical shift */
-}
-
-/* Ensure no calendar REST tag styles leak into sidebar pills */
-#draggable-cards-container .schedule-pill.fc-event-rest {
-  padding-right: 12px !important;       /* cancel any reserved tag space */
-}
-#draggable-cards-container .schedule-pill.fc-event-rest::after {
-  content: none !important;
-}
-/* === Sidebar Schedule Cards: center the Work/Rest mini-pills === */
-#draggable-cards-container .pill-shift {
-  display: inline-flex !important;
-  align-items: center !important;
-  justify-content: center !important;
-
-  /* make the bubble symmetric so text sits dead-center */
-  height: 26px !important;        /* tweak if you want smaller/larger */
-  padding: 0 12px !important;
-  border-radius: 999px !important;
-  line-height: 26px !important;    /* matches height for perfect vertical align */
-  gap: 0 !important;
-  letter-spacing: 0 !important;
-}
-
-/* keep calendar-only REST tag from leaking into sidebar pills */
-#draggable-cards-container .fc-event-rest { padding-right: 0 !important; }
-#draggable-cards-container .fc-event-rest::after { content: none !important; }
-#draggable-cards-container .fc-event[data-type="rest"] .pill-shift:empty::after { content: "" !important; }
 
   /* Powermac-style brand blues */
   :root{
@@ -1323,68 +1287,77 @@ body.multi-dragging { cursor: grabbing; }
   background: rgba(37,99,235,.18);
   -webkit-text-fill-color: #0b2a7a;
 }
-/* === Schedule Cards: hard-center the mini badges (Work/Rest) === */
-#draggable-cards-container .schedule-pill,
-#draggable-cards-container .pill-shift,
-#draggable-cards-container .pill-rest,      /* in case the badge uses this */
-#draggable-cards-container [data-role="shift-badge"] {
-  display: inline-flex !important;
-  align-items: center !important;
-  justify-content: center !important;
-  text-align: center !important;
-
-  /* make the bubble symmetric */
-  height: 28px !important;
-  line-height: 28px !important;
-  padding: 0 12px !important;
-  min-width: 56px;                 /* keeps circle/rounded look with centered text */
-  width: auto !important;
-  gap: 0 !important;
-  letter-spacing: 0 !important;    /* avoid optical shift */
-}
-
-/* Nuke any inner spacing that pushes text left */
-#draggable-cards-container .schedule-pill > *,
-#draggable-cards-container .pill-shift > *,
-#draggable-cards-container .pill-rest > * {
-  margin: 0 !important;
-}
-
-/* Make sure no calendar-only REST tag logic leaks into sidebar */
-#draggable-cards-container .fc-event-rest { padding-right: 0 !important; }
-#draggable-cards-container .fc-event-rest::after { content: none !important; }
-#draggable-cards-container .fc-event[data-type="rest"] .pill-shift:empty::after { content: "" !important; }
-/* === Schedule Cards: perfectly center the mini "Work/Rest" badges === */
+/* FINAL — Schedule Cards (sidebar): center text INSIDE the Work/Rest bubble */
 #draggable-cards-container .schedule-pill,
 #draggable-cards-container .pill-shift {
-  display: grid !important;          /* ignore inherited flex */
-  place-items: center !important;    /* center both axes */
+  /* center the label inside the rounded chip */
+  display: grid !important;
+  place-items: center !important;
   text-align: center !important;
 
-  /* symmetric bubble so text sits dead-center */
+  /* symmetric bubble */
   height: 28px !important;
   line-height: 28px !important;
   padding: 0 12px !important;
   min-width: 56px !important;
   border-radius: 999px !important;
+
+  /* kill anything that nudges text left */
   gap: 0 !important;
   letter-spacing: 0 !important;
 }
 
-/* Remove any decorative pseudo that could shift content */
+/* keep the chip itself pushed to the right end of the row,
+   but keep the text centered inside the chip */
+#draggable-cards-container .pill-shift {
+  margin-left: auto !important;
+}
+
+/* no decorative pseudos in sidebar chips */
 #draggable-cards-container .schedule-pill::before,
 #draggable-cards-container .schedule-pill::after {
   content: none !important;
 }
 
-/* Nuke leftover margins that push the label inside the chip */
-#draggable-cards-container .pill-shift { margin-left: 0 !important; }
+/* remove inner margins that could offset the text */
 #draggable-cards-container .schedule-pill > *,
-#draggable-cards-container .pill-shift > * { margin: 0 !important; }
+#draggable-cards-container .pill-shift > * {
+  margin: 0 !important;
+}
 
-/* Keep calendar-only REST tag rules from leaking into sidebar */
+/* guardrail: never show calendar REST tag in sidebar */
 #draggable-cards-container .fc-event-rest { padding-right: 0 !important; }
 #draggable-cards-container .fc-event-rest::after { content: none !important; }
 
+/* HOTFIX — Sidebar chips: force text to truly center inside the bubble,
+   and keep the chip itself parked at the far right of the row */
+#draggable-cards-container .schedule-pill,
+#draggable-cards-container .pill-shift {
+  display: inline-grid !important;     /* beat any flex */
+  place-items: center !important;      /* center the text inside */
+  justify-self: end !important;        /* if parent is grid */
+  align-self: center !important;
 
+  width: max-content !important;       /* stop stretching */
+  min-width: 56px !important;
+  height: 28px !important;
+  line-height: 28px !important;
+  padding: 0 12px !important;
+  border-radius: 999px !important;
 
+  text-align: center !important;       /* beat earlier text-right */
+  text-indent: 0 !important;           /* nuke odd left indent */
+  letter-spacing: 0 !important;
+  gap: 0 !important;
+}
+
+/* keep the chip positioned at the far right of the row */
+#draggable-cards-container .pill-shift { 
+  margin-left: auto !important; 
+}
+
+/* if your chip contains an inner span, remove margins that shift text */
+#draggable-cards-container .schedule-pill > *,
+#draggable-cards-container .pill-shift > * {
+  margin: 0 !important;
+}
