@@ -23,13 +23,6 @@
   --aurora-1: rgba(59, 130, 246, 0.35);
   --aurora-2: rgba(14, 165, 233, 0.28);
   --aurora-3: rgba(129, 140, 248, 0.32);
-
-  /* Powermac-style brand blues (merged) */
-  --brand-blue-900:#0B2A7A; /* deep base */
-  --brand-blue-700:#1E40AF; /* indigo-ish */
-  --brand-blue-600:#2563EB; /* button blue */
-  --brand-blue-400:#3B82F6; /* bright */
-  --brand-blue-300:#60A5FA; /* light accent */
 }
 
 /* Page */
@@ -154,7 +147,7 @@ body.corporate-shell::before {
 
 .executive-title {
   letter-spacing: -0.04em;
-}
+  }
 
 .executive-subtitle {
   letter-spacing: 0.3em;
@@ -345,13 +338,6 @@ body.corporate-shell::before {
   backdrop-filter: blur(18px);
   overflow-y: auto;
   min-height: 0;
-
-  /* Scroll Enhancements (merged) */
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-  max-height: 100%;
-  overscroll-behavior: contain;
 }
 
 .executive-sidebar::-webkit-scrollbar {
@@ -696,7 +682,7 @@ tbody tr td:first-child {
   align-items: center;
   justify-content: flex-start;
   gap: 8px;
-  width: auto;
+  width: auto; /* changed from 100% so mirror doesn't stretch full width while dragging */
   box-sizing: border-box;
   margin: 2px 0;
   overflow: hidden;
@@ -714,6 +700,7 @@ tbody tr td:first-child {
   flex: 1 1 auto;
   display: flex;
   align-items: center;
+  /* keep content left-aligned so .pill-name stays left and .pill-shift stays right */
   justify-content: flex-start;
   min-width: 0;
 }
@@ -733,20 +720,23 @@ tbody tr td:first-child {
 }
 .fc-event-pill.fc-event-rest,
 .schedule-pill.fc-event-rest {
-  border: none;
-  position: relative;
+  /* keep the employee's own background/color */
+  border: none;                 /* no outline */
+  position: relative;           /* allows right-side label to align */
 }
 
 /* Color the right-side label for REST (by data attribute) */
 .fc-event[data-type="rest"] .pill-shift {
-  color: var(--danger);
+  color: var(--danger);         /* red */
   font-weight: 800;
   letter-spacing: 1px;
 }
+/* Avoid duplicate visual label when global tag is shown */
 .fc-event[data-type="rest"] .pill-shift:empty { display: none; }
 
 /* Keep employee name white on REST pills */
 .fc-event-rest .pill-name { color: #fff !important; }
+
 
 /* Hover effects */
 .fc-event-pill:hover, .schedule-pill:hover {
@@ -769,13 +759,14 @@ tbody tr td:first-child {
 
 /* Multi-select highlight */
 .schedule-pill.selected, .fc-event-pill.selected {
-  outline: 2px solid #2563eb;
+  outline: 2px solid #2563eb; /* Sky-600 ring */
   box-shadow: 0 8px 20px rgba(37,99,235,0.3);
   transform: scale(1.03);
 }
 
 .schedule-pill.drag-preview,
 .fc-event-pill.drag-preview {
+  /* transform: translate(2px, 2px) scale(1.05); */ /* avoid initial hop */
   box-shadow: 0 14px 32px rgba(15,23,42,0.26), 4px 4px 0 rgba(37,99,235,0.35);
   opacity: 0.92;
 }
@@ -790,7 +781,7 @@ body.multi-dragging { cursor: grabbing; }
 .pill-content {
   display: flex;
   align-items: center;
-  width: auto;
+  width: auto; /* keep content compact so drag-mirror centers correctly */
   gap: 8px;
   min-width: 0;
   overflow: visible;
@@ -843,6 +834,7 @@ body.multi-dragging { cursor: grabbing; }
   transition: all 0.2s ease;
 }
 
+/* Table */
 /* Modal */
 .modal-backdrop {
   background: rgba(15, 23, 42, 0.55);
@@ -858,11 +850,11 @@ body.multi-dragging { cursor: grabbing; }
 
 /* Drag ghost styling */
 .drag-ghost {
-  position: fixed;
-  left: 0;
-  top: 0;
-  transform: translate(-50%, -50%);
-  z-index: 9999;
+  position: fixed;              /* <— important */
+  left: 0;                      /* will be overwritten by JS */
+  top: 0;                       /* will be overwritten by JS */
+  transform: translate(-50%, -50%); /* center on pointer */
+  z-index: 9999;                /* float above calendar */
   pointer-events: none;
 
   font-weight: 600;
@@ -876,7 +868,7 @@ body.multi-dragging { cursor: grabbing; }
   justify-content: center;
   gap: 0.35rem;
   text-align: center;
-  will-change: left, top, transform;
+  will-change: left, top, transform; /* smoother */
 }
 
 .drag-ghost-icon {
@@ -909,6 +901,7 @@ body.multi-dragging { cursor: grabbing; }
 /* Make the drag mirror anchor from the pointer corner & avoid extra spacing */
 .fc-mirror { transform-origin: top left !important; }
 .fc-mirror .fc-event-main-frame { margin: 0 !important; }
+
 
 #calendar {
   border-radius: 20px;
@@ -1020,7 +1013,7 @@ body.multi-dragging { cursor: grabbing; }
   box-shadow: 0 6px 20px rgba(0,0,0,0.1);
 }
 .fc-mirror.fc-event-work { background: linear-gradient(135deg, #2563eb, #3b82f6) !important; }
-/* keep mirror compact and aligned with cursor */
+/* ----- Added: keep mirror compact and aligned with cursor ----- */
 .fc-mirror,
 .fc-mirror .fc-event-main-frame,
 .fc-mirror .pill-content {
@@ -1067,7 +1060,17 @@ body.multi-dragging { cursor: grabbing; }
   }
 }
 
-/* --- Sidebar Scroll Enhancements: children (kept) --- */
+
+/* --- Sidebar Scroll Enhancements --- */
+.executive-sidebar {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  max-height: 100%;
+  overscroll-behavior: contain;
+}
+
+/* Employees section (scrolls independently) */
 .executive-sidebar > .data-surface:first-of-type {
   flex: 1;
   display: flex;
@@ -1150,6 +1153,7 @@ body.multi-dragging { cursor: grabbing; }
 #draggable-cards-container .fc-event-pill:active {
   cursor: grabbing;
 }
+/* Make pills draggable without text selection fighting the pointer */
 #draggable-cards-container .fc-event-pill,
 #draggable-cards-container .schedule-pill {
   cursor: grab;
@@ -1160,12 +1164,11 @@ body.multi-dragging { cursor: grabbing; }
 #draggable-cards-container .schedule-pill:active {
   cursor: grabbing;
 }
-
 /* Prevent pointer/mirror offset: kill transforms while dragging */
 .no-transform-during-drag,
 .no-transform-during-drag * {
   transform: none !important;
-  transition: none !important;
+  transition: none !important;  /* added */
 }
 
 /* === Calendar-only REST tag (right side) === */
@@ -1187,143 +1190,201 @@ body.multi-dragging { cursor: grabbing; }
   z-index: 2;
 }
 
-/* Fix: ensure REST ribbon only appears in calendar; never on sidebar cards */
-#draggable-cards-container .fc-event.fc-event-rest::after,
-#draggable-cards-container .fc-event[data-type="rest"]::after,
-#draggable-cards-container .pill-rest,
-#draggable-cards-container .pill-shift.pill-rest {
+/* Keep the employee name readable on REST pills (calendar only) */
+#calendar .fc .fc-event.fc-event-rest .pill-name {
+  color: #fff !important;
+}
+
+/* If any earlier rule tries to auto-insert REST inside .pill-shift, cancel it */
+#calendar .fc .fc-event[data-type="rest"] .pill-shift:empty::after {
+  content: "" !important;
+}
+
+/* === Guardrails: DO NOT show REST tag in the sidebar pills === */
+#draggable-cards-container .fc-event-rest {
+  padding-right: 0 !important;
+}
+#draggable-cards-container .fc-event-rest::after {
   content: none !important;
-  display: none !important;
-  pointer-events: none !important;
+}
+/* Sidebar: cancel the left-side auto "REST" generator */
+#draggable-cards-container .fc-event[data-type="rest"] .pill-shift:empty::after {
+  content: "" !important;
+}
+/* === Fix: center the mini pills inside Schedule Cards only === */
+#draggable-cards-container .schedule-pill {
+  justify-content: center !important;   /* center the text */
+  align-items: center !important;
+  padding: 4px 12px !important;         /* symmetric padding */
+  gap: 0 !important;                    /* no extra spacing */
+  line-height: 1 !important;            /* tidy vertical centering */
+  letter-spacing: 0 !important;         /* avoid optical shift */
 }
 
-/* Narrow the calendar-only REST ribbon to actual calendar event nodes */
-#calendar .fc .fc-daygrid-event.fc-event-rest::after,
-#calendar .fc .fc-timegrid-event.fc-event-rest::after {
-  content: "REST";
-  position: absolute;
-  right: 100px;
-  top: 50%;
-  transform: translateY(-50%);
-  color: var(--danger);
-  font-weight: 800;
-  letter-spacing: 1px;
-  pointer-events: none;
-  z-index: 2;
+/* Ensure no calendar REST tag styles leak into sidebar pills */
+#draggable-cards-container .schedule-pill.fc-event-rest {
+  padding-right: 12px !important;       /* cancel any reserved tag space */
+}
+#draggable-cards-container .schedule-pill.fc-event-rest::after {
+  content: none !important;
+}
+/* === Sidebar Schedule Cards: center the Work/Rest mini-pills === */
+#draggable-cards-container .pill-shift {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+
+  /* make the bubble symmetric so text sits dead-center */
+  height: 26px !important;        /* tweak if you want smaller/larger */
+  padding: 0 12px !important;
+  border-radius: 999px !important;
+  line-height: 26px !important;    /* matches height for perfect vertical align */
+  gap: 0 !important;
+  letter-spacing: 0 !important;
 }
 
-/* ---------- Brand Title (merged single selector) ---------- */
+/* keep calendar-only REST tag from leaking into sidebar pills */
+#draggable-cards-container .fc-event-rest { padding-right: 0 !important; }
+#draggable-cards-container .fc-event-rest::after { content: none !important; }
+#draggable-cards-container .fc-event[data-type="rest"] .pill-shift:empty::after { content: "" !important; }
+
+  /* Powermac-style brand blues */
+  :root{
+    --brand-blue-900:#0B2A7A; /* deep base */
+    --brand-blue-700:#1E40AF; /* indigo-ish */
+    --brand-blue-600:#2563EB; /* button blue */
+    --brand-blue-400:#3B82F6; /* bright */
+    --brand-blue-300:#60A5FA; /* light accent */
+  }
+
+  /* Title skin tuned for glassy headers */
+  .tp-title--brand {
+    /* keep your Inter var features from .tp-title */
+    letter-spacing:-0.02em;
+    background: linear-gradient(
+      90deg,
+      var(--brand-blue-900) 0%,
+      var(--brand-blue-700) 22%,
+      var(--brand-blue-600) 55%,
+      var(--brand-blue-300) 100%
+    );
+    -webkit-background-clip:text;
+    background-clip:text;
+    color: transparent;
+
+    /* survive frosted/light backgrounds */
+    text-shadow:
+      0 1px 0 rgba(255,255,255,.35),   /* subtle light edge for glass */
+      0 1px 1px rgba(0,0,0,.35);       /* soft drop for contrast */
+    /* optional hairline stroke (WebKit) */
+    -webkit-text-stroke: .35px rgba(255,255,255,.28);
+  }
+
+  /* Dark mode tweak: lighten and drop the white stroke */
+  @media (prefers-color-scheme: dark){
+    .tp-title--brand{
+      text-shadow:
+        0 1px 0 rgba(0,0,0,.25),
+        0 1px 1px rgba(0,0,0,.45);
+      -webkit-text-stroke: .2px rgba(0,0,0,.25);
+      background: linear-gradient(
+        90deg,
+        #93C5FD 0%,
+        #60A5FA 40%,
+        #3B82F6 70%,
+        #2563EB 100%
+      );
+    }
+  }
+
+  /* High-contrast users: fall back to solid */
+  @media (prefers-contrast: more){
+    .tp-title--brand{
+      color: var(--brand-blue-700);
+      background: none !important;
+      -webkit-text-stroke: 0 !important;
+      text-shadow: 0 1px 1px rgba(0,0,0,.5);
+    }
+  }
+  /* Gradient on glyphs only */
 .tp-title--brand {
-  /* gradient on glyphs only */
-  background-image: linear-gradient(90deg,var(--brand-blue-900) 0%, var(--brand-blue-700) 22%, var(--brand-blue-600) 55%, var(--brand-blue-300) 100%);
+  background-image: linear-gradient(90deg,#0B2A7A 0%, #1E40AF 22%, #2563EB 55%, #60A5FA 100%);
   background-repeat: no-repeat;
   background-size: 100% 100%;
-  background-color: transparent !important;
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-  -webkit-text-fill-color: transparent;
+  background-color: transparent !important; /* kill any box bg */
+  -webkit-background-clip: text;  /* Safari/Chrome */
+  background-clip: text;          /* Spec */
+  color: transparent;             /* non-WebKit */
+  -webkit-text-fill-color: transparent; /* Safari needs this */
+}
 
-  /* legibility over glass */
-  letter-spacing:-0.02em;
-  text-shadow:
-    0 1px 0 rgba(255,255,255,.35),
-    0 1px 1px rgba(0,0,0,.35);
-  -webkit-text-stroke: .35px rgba(255,255,255,.28);
-}
-@media (prefers-color-scheme: dark){
-  .tp-title--brand{
-    text-shadow:
-      0 1px 0 rgba(0,0,0,.25),
-      0 1px 1px rgba(0,0,0,.45);
-    -webkit-text-stroke: .2px rgba(0,0,0,.25);
-    background-image: linear-gradient(90deg,#93C5FD 0%, #60A5FA 40%, #3B82F6 70%, #2563EB 100%);
-  }
-}
-@media (prefers-contrast: more){
-  .tp-title--brand{
-    color: var(--brand-blue-700);
-    background: none !important;
-    -webkit-text-stroke: 0 !important;
-    text-shadow: 0 1px 1px rgba(0,0,0,.5);
-  }
-}
-/* selected text still readable */
+/* optional: selected text still readable */
 .tp-title--brand::selection {
   background: rgba(37,99,235,.18);
   -webkit-text-fill-color: #0b2a7a;
 }
-
-/* ---------- FINAL: Schedule Cards (sidebar) CENTERED TEXT INSIDE CHIP ---------- */
-/* This guarantees the Work/Rest chip sits at the right edge of the row,
-   but the text inside the chip is perfectly centered. */
+/* === Schedule Cards: hard-center the mini badges (Work/Rest) === */
 #draggable-cards-container .schedule-pill,
-#draggable-cards-container .pill-shift {
-  display: inline-grid !important;     /* beat any flex inheritance */
-  place-items: center !important;      /* center label horizontally & vertically */
-  justify-self: end !important;        /* if parent is grid */
-  align-self: center !important;
+#draggable-cards-container .pill-shift,
+#draggable-cards-container .pill-rest,      /* in case the badge uses this */
+#draggable-cards-container [data-role="shift-badge"] {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  text-align: center !important;
 
-  width: max-content !important;       /* stop stretching the chip */
-  min-width: 56px !important;
+  /* make the bubble symmetric */
   height: 28px !important;
   line-height: 28px !important;
   padding: 0 12px !important;
-  border-radius: 999px !important;
-
-  text-align: center !important;       /* override any text-right */
-  text-indent: 0 !important;
-  letter-spacing: 0 !important;
+  min-width: 56px;                 /* keeps circle/rounded look with centered text */
+  width: auto !important;
   gap: 0 !important;
+  letter-spacing: 0 !important;    /* avoid optical shift */
 }
-/* keep the chip pushed to the far right within the row */
-#draggable-cards-container .pill-shift { 
-  margin-left: auto !important; 
-}
-/* remove inner margins that could offset the text */
+
+/* Nuke any inner spacing that pushes text left */
 #draggable-cards-container .schedule-pill > *,
-#draggable-cards-container .pill-shift > * {
+#draggable-cards-container .pill-shift > *,
+#draggable-cards-container .pill-rest > * {
   margin: 0 !important;
 }
-/* never show calendar-only REST tag in the sidebar */
+
+/* Make sure no calendar-only REST tag logic leaks into sidebar */
+#draggable-cards-container .fc-event-rest { padding-right: 0 !important; }
+#draggable-cards-container .fc-event-rest::after { content: none !important; }
+#draggable-cards-container .fc-event[data-type="rest"] .pill-shift:empty::after { content: "" !important; }
+/* === Schedule Cards: perfectly center the mini "Work/Rest" badges === */
+#draggable-cards-container .schedule-pill,
+#draggable-cards-container .pill-shift {
+  display: grid !important;          /* ignore inherited flex */
+  place-items: center !important;    /* center both axes */
+  text-align: center !important;
+
+  /* symmetric bubble so text sits dead-center */
+  height: 28px !important;
+  line-height: 28px !important;
+  padding: 0 12px !important;
+  min-width: 56px !important;
+  border-radius: 999px !important;
+  gap: 0 !important;
+  letter-spacing: 0 !important;
+}
+
+/* Remove any decorative pseudo that could shift content */
 #draggable-cards-container .schedule-pill::before,
 #draggable-cards-container .schedule-pill::after {
   content: none !important;
 }
-/* --- FIX: Sidebar Work/Rest chip center text (no calendar impact) --- */
-#draggable-cards-container .pill-content {
-  display: flex;                /* ensure row is flex so margin-left:auto works */
-  align-items: center;
-}
 
-#draggable-cards-container .pill-shift,
-#draggable-cards-container .schedule-pill {
-  /* keep chip at far right, but center its label */
-  margin-left: auto !important;       /* park chip right */
-  display: inline-grid !important;    /* defeat any inherited flex */
-  place-items: center !important;     /* center label H/V */
-  width: max-content !important;      /* stop stretch */
-  min-width: 56px !important;
-  height: 28px !important;
-  line-height: 28px !important;
-  padding: 0 12px !important;
-  border-radius: 999px !important;
+/* Nuke leftover margins that push the label inside the chip */
+#draggable-cards-container .pill-shift { margin-left: 0 !important; }
+#draggable-cards-container .schedule-pill > *,
+#draggable-cards-container .pill-shift > * { margin: 0 !important; }
 
-  /* overwrite earlier text-right/indent/spacing */
-  text-align: center !important;
-  text-indent: 0 !important;
-  letter-spacing: 0 !important;
-  gap: 0 !important;
-}
-
-/* kill any inner spacing that nudges the text */
-#draggable-cards-container .pill-shift > *,
-#draggable-cards-container .schedule-pill > * {
-  display: block;
-  margin: 0 !important;
-  padding: 0 !important;
-}
-
-/* ensure the calendar-only REST ribbon never appears in sidebar */
+/* Keep calendar-only REST tag rules from leaking into sidebar */
+#draggable-cards-container .fc-event-rest { padding-right: 0 !important; }
 #draggable-cards-container .fc-event-rest::after { content: none !important; }
+
+
 
