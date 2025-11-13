@@ -1342,6 +1342,23 @@ function finalizeSidebarEventDrop(newEvent) {
   /* ===========================
      CONFLICT DETECTION (kept)
   =========================== */
+
+// Weekend rest counting: Friday/Saturday/Sunday all count toward the SAME week.
+// Change this if you want a different cap:
+const WEEKEND_REST_WEEK_LIMIT = 2;
+
+// ISO week key (YYYY-Www). Week starts Monday (ISO-8601).
+function isoWeekKeyFromDate(d) {
+  // clone to avoid mutating
+  const date = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+  // Thursday in current week decides the year
+  date.setUTCDate(date.getUTCDate() + 4 - (date.getUTCDay() || 7));
+  const yearStart = new Date(Date.UTC(date.getUTCFullYear(), 0, 1));
+  const weekNo = Math.ceil((((date - yearStart) / 86400000) + 1) / 7);
+  const yyyy = date.getUTCFullYear();
+  return `${yyyy}-W${String(weekNo).padStart(2, '0')}`;
+}
+
   function getGroupedEvents() {
     const allEvents = calendar ? calendar.getEvents() : [];
     const eventsByDate = {}, eventsByEmp = {};
@@ -1387,15 +1404,37 @@ function finalizeSidebarEventDrop(newEvent) {
       }
     }
 
-    for (const empNo in eventsByEmp) {
-      const weekendRestEvents = eventsByEmp[empNo].filter(event => {
-        const day = event.start.getDay();
-        return event.extendedProps.type === 'rest' && (day === 0 || day === 6);
+for (const empNo in eventsByEmp) {
+  // Group weekend REST events by ISO week (Fri/Sat/Sun are "weekend")
+  const weeksMap = new Map(); // weekKey -> events in that weekend week
+  eventsByEmp[empNo].forEach(event => {
+    if (event.extendedProps.type !== 'rest') return;
+    const day = event.start.getDay(); // Sun=0 ... Sat=6
+    const isWeekend = (day === 5 || day === 6 || day === 0); // Fri, Sat, Sun
+    if (!isWeekend) return;
+
+    const weekKey = isoWeekKeyFromDate(event.start);
+    if (!weeksMap.has(weekKey)) weeksMap.set(weekKey, []);
+    weeksMap.get(weekKey).push(event);
+  });
+
+  const weekKeys = Array.from(weeksMap.keys()).sort(); // stable ordering
+  if (weekKeys.length > WEEKEND_REST_WEEK_LIMIT) {
+    // Mark ONLY the "excess" weekend weeks beyond the limit as conflicts
+    const excessWeekKeys = weekKeys.slice(WEEKEND_REST_WEEK_LIMIT);
+    excessWeekKeys.forEach(wk => {
+      const evts = weeksMap.get(wk) || [];
+      evts.forEach(event => {
+        conflicts.push({
+          empNo,
+          date: event.startStr,
+          rule: `Exceeds ${WEEKEND_REST_WEEK_LIMIT} Weekend Rest Weeks`,
+          event
+        });
       });
-      if (weekendRestEvents.length > 2) {
-        weekendRestEvents.forEach(event => { conflicts.push({ empNo, date: event.startStr, rule: 'Exceeds 2 Weekend Rest Days', event }); });
-      }
-    }
+    });
+  }
+}
     return conflicts;
   }
 
