@@ -400,56 +400,89 @@
         </div>
     </div>
 
-    <!-- 2. Export Modal -->
-    <div id="export-modal" class="fixed inset-0 z-40 flex items-center justify-center p-4 modal-backdrop hidden">
-        <div class="w-full max-w-lg bg-white rounded-xl shadow-2xl overflow-hidden" role="dialog" aria-modal="true">
-            <div class="p-6">
-                <h3 class="text-lg font-medium leading-6 text-gray-900">
-                    Confirm Export
-                </h3>
-                <div class="mt-4 space-y-4">
-                    <p class="text-sm text-gray-600">This will generate a .xlsx file with the current schedule. Please review the summary below.</p>
-                    
-                    <!-- Conflict Warning Banner -->
-                    <div id="export-conflict-warning" class="hidden p-4 bg-yellow-50 border border-yellow-200 rounded-md">
-                        <div class="flex">
-                            <div class="flex-shrink-0">
-                                <svg class="h-5 w-5 text-yellow-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
-                                    <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM10 13a1 1 0 100-2 1 1 0 000 2zm-1-3a1 1 0 011-1h.01a1 1 0 110 2H10a1 1 0 01-1-1z" clip-rule="evenodd" />
-                                </svg>
-                            </div>
-                            <div class="ml-3">
-                                <h3 class="text-sm font-medium text-yellow-800">Warning: Conflicts Detected</h3>
-                                <div class="mt-2 text-sm text-yellow-700">
-                                    <p>The current schedule has <strong id="export-conflict-count">0</strong> conflicts. These will be included in a separate 'Conflicts' tab in the exported file.</p>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                    
-                    <!-- Export Summary -->
-                    <div class="grid grid-cols-2 gap-4">
-                        <div class="p-4 bg-blue-50 rounded-lg">
-                            <div class="text-sm font-medium text-blue-700">Total Work Days</div>
-                            <div id="export-work-count" class="text-2xl font-bold text-blue-900">0</div>
-                        </div>
-                        <div class="p-4 bg-red-50 rounded-lg">
-                            <div class="text-sm font-medium text-red-700">Total Rest Days</div>
-                            <div id="export-rest-count" class="text-2xl font-bold text-red-900">0</div>
-                        </div>
-                    </div>
-                </div>
+<!-- 2. Export Modal -->
+<div id="export-modal" class="fixed inset-0 z-40 flex items-center justify-center p-4 modal-backdrop hidden">
+  <div class="w-full max-w-lg bg-white rounded-xl shadow-2xl overflow-hidden" role="dialog" aria-modal="true">
+    <div class="p-6">
+      <h3 class="text-lg font-medium leading-6 text-gray-900">
+        Confirm Export
+      </h3>
+
+      <div class="mt-4 space-y-4">
+        <p class="text-sm text-gray-600">
+          This will generate a .xlsx file with the current schedule. Please review the summary below.
+        </p>
+
+        <!-- Conflict Warning Banner -->
+        <div id="export-conflict-warning" class="hidden p-4 bg-yellow-50 border border-yellow-200 rounded-md">
+          <div class="flex">
+            <div class="flex-shrink-0">
+              <svg class="h-5 w-5 text-yellow-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"
+                   fill="currentColor" aria-hidden="true">
+                <path fill-rule="evenodd"
+                      d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM10 13a1 1 0 100-2 1 1 0 000 2zm-1-3a1 1 0 011-1h.01a1 1 0 110 2H10a1 1 0 01-1-1z"
+                      clip-rule="evenodd"/>
+              </svg>
             </div>
-            <div class="bg-gray-50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
-                <button id="confirm-export-btn" type="button" class="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-green-600 text-base font-medium text-white hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 sm:ml-3 sm:w-auto sm:text-sm">
-                    Confirm & Download
-                </button>
-                <button data-modal-close="export-modal" type="button" class="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm">
-                    Cancel
-                </button>
+            <div class="ml-3">
+              <h3 class="text-sm font-medium text-yellow-800">Warning: Conflicts Detected</h3>
+              <div class="mt-2 text-sm text-yellow-700">
+                <p>The current schedule has <strong id="export-conflict-count">0</strong> conflicts. These will be included
+                  in a separate 'Conflicts' tab in the exported file.</p>
+              </div>
             </div>
+          </div>
         </div>
+
+        <!-- Export Summary -->
+        <div class="grid grid-cols-2 gap-4">
+          <div class="p-4 bg-blue-50 rounded-lg">
+            <div class="text-sm font-medium text-blue-700">Total Work Days</div>
+            <div id="export-work-count" class="text-2xl font-bold text-blue-900">0</div>
+          </div>
+          <div class="p-4 bg-red-50 rounded-lg">
+            <div class="text-sm font-medium text-red-700">Total Rest Days</div>
+            <div id="export-rest-count" class="text-2xl font-bold text-red-900">0</div>
+          </div>
+        </div>
+
+        <!-- Report Details -->
+        <div class="mt-6 space-y-3">
+          <div>
+            <label for="export-br-code" class="block text-sm font-medium text-gray-700">BR-CODE</label>
+            <input id="export-br-code" type="text"
+                   class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                   placeholder="e.g. BR-001">
+          </div>
+          <div>
+            <label for="export-branch-name" class="block text-sm font-medium text-gray-700">BRANCH NAME</label>
+            <input id="export-branch-name" type="text"
+                   class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                   placeholder="e.g. Power Mac Center Greenbelt">
+          </div>
+          <div>
+            <label for="export-month" class="block text-sm font-medium text-gray-700">MONTH</label>
+            <input id="export-month" type="text"
+                   class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                   placeholder="e.g. November 2025">
+          </div>
+        </div>
+      </div>
     </div>
+
+    <div class="bg-gray-50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
+      <button id="confirm-export-btn" type="button"
+              class="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-green-600 text-base font-medium text-white hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 sm:ml-3 sm:w-auto sm:text-sm">
+        Confirm & Download
+      </button>
+      <button data-modal-close="export-modal" type="button"
+              class="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm">
+        Cancel
+      </button>
+    </div>
+  </div>
+</div>
+
 
     <!-- 3. Delete Confirmation Modal -->
     <div id="delete-modal" class="fixed inset-0 z-40 flex items-center justify-center p-4 modal-backdrop hidden">

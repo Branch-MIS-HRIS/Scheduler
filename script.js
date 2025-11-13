@@ -1359,84 +1359,101 @@ function isoWeekKeyFromDate(d) {
   return `${yyyy}-W${String(weekNo).padStart(2, '0')}`;
 }
 
-  function getGroupedEvents() {
-    const allEvents = calendar ? calendar.getEvents() : [];
-    const eventsByDate = {}, eventsByEmp = {};
-    allEvents.forEach(event => {
-      const dateStr = event.startStr; const { empNo } = event.extendedProps;
-      if (!eventsByDate[dateStr]) eventsByDate[dateStr] = []; eventsByDate[dateStr].push(event);
-      if (!eventsByEmp[empNo]) eventsByEmp[empNo] = []; eventsByEmp[empNo].push(event);
+// Anchor any Fri/Sat/Sun to the FRIDAY of that same weekend (LOCAL time)
+function weekendWeekKeyLocal(d) {
+  const dt = new Date(d.getFullYear(), d.getMonth(), d.getDate()); // local midnight
+  const dow = dt.getDay(); // Sun=0 .. Sat=6
+  if (!(dow === 5 || dow === 6 || dow === 0)) return null; // only Fri/Sat/Sun
+
+// distance TO Friday (Fri=0, Sat=-1, Sun=-2)
+const deltaToFri = (dow === 0) ? -2 : (5 - dow);
+const fri = new Date(dt);
+fri.setDate(dt.getDate() + deltaToFri);
+
+  // Use Friday date string as the unique weekend key
+  const y = fri.getFullYear();
+  const m = String(fri.getMonth() + 1).padStart(2, '0');
+  const d2 = String(fri.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d2}`;
+}
+
+function getGroupedEvents() {
+  const allEvents = calendar ? calendar.getEvents() : [];
+  const eventsByDate = {}, eventsByEmp = {};
+  allEvents.forEach(event => {
+    const dateStr = event.startStr; const { empNo } = event.extendedProps;
+    if (!eventsByDate[dateStr]) eventsByDate[dateStr] = []; eventsByDate[dateStr].push(event);
+    if (!eventsByEmp[empNo]) eventsByEmp[empNo] = []; eventsByEmp[empNo].push(event);
+  });
+  return { allEvents, eventsByDate, eventsByEmp };
+}
+
+function getConflicts() {
+  const { eventsByDate, eventsByEmp } = getGroupedEvents();
+  let conflicts = [];
+
+  // Same-day Work & Rest conflict
+  for (const date in eventsByDate) {
+    const dailyEvents = eventsByDate[date];
+    const empEventsOnDate = {};
+    dailyEvents.forEach(event => {
+      const { empNo } = event.extendedProps;
+      if (!empEventsOnDate[empNo]) empEventsOnDate[empNo] = [];
+      empEventsOnDate[empNo].push(event);
     });
-    return { allEvents, eventsByDate, eventsByEmp };
-  }
-
-  function getConflicts() {
-    const { eventsByDate, eventsByEmp } = getGroupedEvents();
-    let conflicts = [];
-
-    for (const date in eventsByDate) {
-      const dailyEvents = eventsByDate[date];
-      const empEventsOnDate = {};
-      dailyEvents.forEach(event => {
-        const { empNo } = event.extendedProps;
-        if (!empEventsOnDate[empNo]) empEventsOnDate[empNo] = [];
-        empEventsOnDate[empNo].push(event);
-      });
-      for (const empNo in empEventsOnDate) {
-        const events = empEventsOnDate[empNo];
-        if (events.length > 1) {
-          const hasWork = events.some(e => e.extendedProps.type === 'work');
-          const hasRest = events.some(e => e.extendedProps.type === 'rest');
-          if (hasWork && hasRest) {
-            events.forEach(event => { conflicts.push({ empNo, date, rule: 'Work & Rest on Same Day', event }); });
-          }
+    for (const empNo in empEventsOnDate) {
+      const events = empEventsOnDate[empNo];
+      if (events.length > 1) {
+        const hasWork = events.some(e => e.extendedProps.type === 'work');
+        const hasRest = events.some(e => e.extendedProps.type === 'rest');
+        if (hasWork && hasRest) {
+          events.forEach(event => { conflicts.push({ empNo, date, rule: 'Work & Rest on Same Day', event }); });
         }
       }
     }
+  }
 
-    for (const date in eventsByDate) {
-      const managerRestEvents = eventsByDate[date].filter(event => {
-        const emp = employees[event.extendedProps.empNo];
-        return event.extendedProps.type === 'rest' && emp && managerPositions.includes(emp.position);
-      });
-      if (managerRestEvents.length > 1) {
-        managerRestEvents.forEach(event => { conflicts.push({ empNo: event.extendedProps.empNo, date, rule: 'Multiple Managers Resting', event }); });
-      }
+  // Multiple managers resting same day
+  for (const date in eventsByDate) {
+    const managerRestEvents = eventsByDate[date].filter(event => {
+      const emp = employees[event.extendedProps.empNo];
+      return event.extendedProps.type === 'rest' && emp && managerPositions.includes(emp.position);
+    });
+    if (managerRestEvents.length > 1) {
+      managerRestEvents.forEach(event => { conflicts.push({ empNo: event.extendedProps.empNo, date, rule: 'Multiple Managers Resting', event }); });
     }
+  }
 
-for (const empNo in eventsByEmp) {
-  // Group weekend REST events by ISO week (Fri/Sat/Sun are "weekend")
-  const weeksMap = new Map(); // weekKey -> events in that weekend week
-  eventsByEmp[empNo].forEach(event => {
-    if (event.extendedProps.type !== 'rest') return;
-    const day = event.start.getDay(); // Sun=0 ... Sat=6
-    const isWeekend = (day === 5 || day === 6 || day === 0); // Fri, Sat, Sun
-    if (!isWeekend) return;
+  // Weekend rest week cap (Fri/Sat/Sun count as one "weekend" anchored to Friday)
+  for (const empNo in eventsByEmp) {
+    const weeksMap = new Map(); // fridayKey -> events in that Fri–Sun group
+    eventsByEmp[empNo].forEach(event => {
+      if (event.extendedProps.type !== 'rest') return;
+      const key = weekendWeekKeyLocal(event.start);
+      if (!key) return; // not Fri/Sat/Sun
+      if (!weeksMap.has(key)) weeksMap.set(key, []);
+      weeksMap.get(key).push(event);
+    });
 
-    const weekKey = isoWeekKeyFromDate(event.start);
-    if (!weeksMap.has(weekKey)) weeksMap.set(weekKey, []);
-    weeksMap.get(weekKey).push(event);
-  });
-
-  const weekKeys = Array.from(weeksMap.keys()).sort(); // stable ordering
-  if (weekKeys.length > WEEKEND_REST_WEEK_LIMIT) {
-    // Mark ONLY the "excess" weekend weeks beyond the limit as conflicts
-    const excessWeekKeys = weekKeys.slice(WEEKEND_REST_WEEK_LIMIT);
-    excessWeekKeys.forEach(wk => {
-      const evts = weeksMap.get(wk) || [];
-      evts.forEach(event => {
-        conflicts.push({
-          empNo,
-          date: event.startStr,
-          rule: `Exceeds ${WEEKEND_REST_WEEK_LIMIT} Weekend Rest Weeks`,
-          event
+    // Keep earliest two; flag excess (use .reverse() if you prefer latest two)
+    const weekKeys = Array.from(weeksMap.keys()).sort();
+    if (weekKeys.length > WEEKEND_REST_WEEK_LIMIT) {
+      const excessWeekKeys = weekKeys.slice(WEEKEND_REST_WEEK_LIMIT);
+      excessWeekKeys.forEach(wk => {
+        (weeksMap.get(wk) || []).forEach(event => {
+          conflicts.push({
+            empNo,
+            date: event.startStr,
+            rule: `Exceeds ${WEEKEND_REST_WEEK_LIMIT} Weekend Rest Weeks`,
+            event
+          });
         });
       });
-    });
+    }
   }
+
+  return conflicts;
 }
-    return conflicts;
-  }
 
   function runConflictDetection() {
     const { allEvents } = getGroupedEvents();
@@ -1491,10 +1508,50 @@ for (const empNo in eventsByEmp) {
   function exportToExcel() {
     if (!calendar) return;
 
+    // --- NEW: gather required report fields ---
+const brCodeEl = document.getElementById('export-br-code');
+const branchNameEl = document.getElementById('export-branch-name');
+const monthEl = document.getElementById('export-month');
+
+const brCode = (brCodeEl?.value || '').trim();
+const branchName = (branchNameEl?.value || '').trim();
+const monthLabel = (monthEl?.value || '').trim();
+
+if (!brCode || !branchName || !monthLabel) {
+  if (typeof showToast === 'function') {
+    showToast('Please fill in BR-CODE, BRANCH NAME, and MONTH before exporting.', 'warn');
+  }
+  return;
+}
+
+// safe filename pieces (avoid illegal filename chars)
+const clean = s => String(s).replace(/[\\/:*?"<>|]+/g, '-').replace(/\s+/g, ' ').trim();
+const fileName = `${clean(brCode)}_${clean(branchName)}_${clean(monthLabel)}_Schedule.xlsx`;
+
+// we’ll also add a small “Report Info” sheet as the first tab
+
     const conflicts = typeof getConflicts === 'function' ? getConflicts() : [];
     const allEvents = calendar.getEvents();
     const daysOfWeek = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
     const wb = XLSX.utils.book_new();
+
+    const infoData = [
+  ['BR-CODE', brCode],
+  ['BRANCH NAME', branchName],
+  ['MONTH', monthLabel],
+  ['Generated', new Date().toLocaleString()]
+];
+const wsInfo = XLSX.utils.aoa_to_sheet(infoData);
+try {
+  // make left column a bit wider
+  wsInfo['!cols'] = [{ wpx: 140 }, { wpx: 420 }];
+  // bold left keys
+  infoData.forEach((row, r) => {
+    const addr = XLSX.utils.encode_cell({ c: 0, r });
+    if (wsInfo[addr]) wsInfo[addr].s = Object.assign({}, wsInfo[addr].s || {}, { font: { bold: true } });
+  });
+} catch (_) {}
+XLSX.utils.book_append_sheet(wb, wsInfo, 'Report Info');
 
     // Helper: pixel-based auto-fit (works better than 'wch' across Excel versions)
     function autoFitColumnsWpx(aoa, floorsPx, maxPx = 1200, padPx = 18) {
@@ -1609,7 +1666,7 @@ for (const empNo in eventsByEmp) {
     }
 
     // Write the file and close
-    XLSX.writeFile(wb, 'Branch_Schedule_Report.xlsx');
+    XLSX.writeFile(wb, fileName);
     if (typeof closeModal === 'function' && typeof exportModal !== 'undefined' && exportModal) closeModal(exportModal);
     if (typeof showToast === 'function') showToast('Excel report downloaded successfully!', 'success');
   }
