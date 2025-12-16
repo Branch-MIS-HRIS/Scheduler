@@ -238,6 +238,25 @@ function getDateUnderPointer() {
   }
 
   const tooltipCache = new WeakMap();
+  let tooltipDelegateInstance = null;
+
+  const isDragPerfSuppressed = () => !!window.__globalDragActive;
+
+  function ensureTooltipDelegate() {
+    if (typeof tippy === 'undefined') return;
+    if (tooltipDelegateInstance) return;
+    tooltipDelegateInstance = tippy.delegate(document.body, {
+      target: '.schedule-pill[data-tooltip-content]',
+      allowHTML: true,
+      theme: 'light-border',
+      placement: 'top',
+      delay: [150, 50],
+      onShow(instance) {
+        const content = instance?.reference?.dataset?.tooltipContent;
+        if (content && instance.props.content !== content) instance.setContent(content);
+      }
+    });
+  }
 
   function buildEventTooltipContent(event) {
     if (!event) return '';
@@ -288,16 +307,15 @@ function getDateUnderPointer() {
   }
 
   function refreshEventTooltip(event, el) {
-    if (!event || typeof tippy === 'undefined') return;
+    if (!event || typeof tippy === 'undefined' || isDragPerfSuppressed()) return;
     const target = el || (typeof findEventElementByEvent === 'function' ? findEventElementByEvent(event) : null);
     if (!target) return;
     const content = getCachedTooltipContent(event);
     try {
-      if (target._tippy) {
-        if (target._tippy.props?.content !== content) target._tippy.setContent(content);
-      } else {
-        tippy(target, { content, allowHTML: true, theme: 'light-border', placement: 'top' });
-      }
+      if (target._tippy && target._tippy.destroy) { target._tippy.destroy(); }
+      if (target.dataset.tooltipContent !== content) target.dataset.tooltipContent = content;
+      target.setAttribute('data-tooltip-content', content || '');
+      ensureTooltipDelegate();
     } catch (e) {}
   }
 
@@ -368,6 +386,7 @@ function getDateUnderPointer() {
   let selectedTargetDates = new Set();
   let lastMouseX = 0, lastMouseY = 0;
   let isDragging = false, dragGhost = null;
+  const setGlobalDragFlag = active => { window.__globalDragActive = !!active; };
   let isSelectingDates = false, dateSelectStartEl = null;
   let dragAnchorDate = null;
   let dragSelectionEvents = [];
@@ -636,11 +655,11 @@ function initializeCalendar() {
     dayMaxEvents: true,
     height: 'auto',
 
-    eventDragStart(info) { document.body.classList.add('no-transform-during-drag'); },
-eventDragStop(info)  { document.body.classList.remove('no-transform-during-drag'); },
+    eventDragStart(info) { setGlobalDragFlag(true); document.body.classList.add('no-transform-during-drag'); },
+eventDragStop(info)  { setGlobalDragFlag(false); document.body.classList.remove('no-transform-during-drag'); },
 
-eventResizeStart(info) { document.body.classList.add('no-transform-during-drag'); },
-eventResizeStop(info)  { document.body.classList.remove('no-transform-during-drag'); },
+eventResizeStart(info) { setGlobalDragFlag(true); document.body.classList.add('no-transform-during-drag'); },
+eventResizeStop(info)  { setGlobalDragFlag(false); document.body.classList.remove('no-transform-during-drag'); },
 
     /* -------------------------
        External item received
@@ -856,8 +875,8 @@ eventResizeStop(info)  { document.body.classList.remove('no-transform-during-dra
 
   calendar.render();
   // Safety: double-guard transform neutralization during drag/resize
-calendar.on('eventDragStart', () => document.body.classList.add('no-transform-during-drag'));
-calendar.on('eventDragStop',  () => document.body.classList.remove('no-transform-during-drag'));
+  calendar.on('eventDragStart', () => { setGlobalDragFlag(true); document.body.classList.add('no-transform-during-drag'); });
+  calendar.on('eventDragStop',  () => { setGlobalDragFlag(false); document.body.classList.remove('no-transform-during-drag'); });
 calendar.on('eventResizeStart', () => document.body.classList.add('no-transform-during-drag'));
 calendar.on('eventResizeStop',  () => document.body.classList.remove('no-transform-during-drag'));
   try { window.calendar = calendar; } catch (e) {}
@@ -902,10 +921,12 @@ function initializeDraggable() {
 if (calendar && typeof calendar.on === 'function' && !__calendarDragLiftWired) {
   calendar.on('eventDragStart', function () {
     // lock transforms to avoid cursor/mirror offset
+    setGlobalDragFlag(true);
     document.body.classList.add('no-transform-during-drag');
   });
 
   calendar.on('eventDragStop', function () {
+    setGlobalDragFlag(false);
     document.body.classList.remove('no-transform-during-drag');
   });
 
@@ -974,6 +995,7 @@ function handleSidebarCardDragStart(ev) {
   card.setAttribute('data-drag-payload', payloadJson);
   __isSidebarDragging = true;
   draggableCardsContainer?.classList.add('is-dragging');
+  setGlobalDragFlag(true);
   document.body.classList.add('no-transform-during-drag');
 
   if (ev.dataTransfer) {
@@ -987,6 +1009,7 @@ function handleSidebarCardDragEnd(ev) {
   const card = ev.currentTarget;
   __isSidebarDragging = false;
   draggableCardsContainer?.classList.remove('is-dragging');
+  setGlobalDragFlag(false);
   document.body.classList.remove('no-transform-during-drag');
   if (card) card.removeAttribute('data-drag-payload');
 }
@@ -2253,17 +2276,26 @@ XLSX.utils.book_append_sheet(wb, wsInfo, 'Report Info');
   }
 
   // Mouse tracking for copy/paste hover
+  let mouseUpdateQueued = false;
   const updateMouse = e => {
     lastMouseX = e.clientX; lastMouseY = e.clientY;
-    const pill = e.target.closest?.('.schedule-pill');
-    if (pill) {
-      const id = getScheduleIdFromElement(pill);
-      if (id) hoveredScheduleId = id;
-    } else if (!document.elementFromPoint(lastMouseX,lastMouseY)?.closest('.schedule-pill')) {
-      hoveredScheduleId = null;
-    }
+    if (mouseUpdateQueued) return;
+    mouseUpdateQueued = true;
+    const runner = () => {
+      mouseUpdateQueued = false;
+      if (isDragPerfSuppressed()) return;
+      const pointerTarget = document.elementFromPoint(lastMouseX,lastMouseY);
+      const pill = pointerTarget?.closest('.schedule-pill');
+      if (pill) {
+        const id = getScheduleIdFromElement(pill);
+        if (id) hoveredScheduleId = id;
+      } else if (!pointerTarget?.closest('.schedule-pill')) {
+        hoveredScheduleId = null;
+      }
+    };
+    if (typeof requestAnimationFrame === 'function') requestAnimationFrame(runner); else setTimeout(runner, 16);
   };
-  document.addEventListener('mousemove', updateMouse);
+  document.addEventListener('mousemove', updateMouse, { passive: true });
 
   function clearTargetDateSelectionIfNeeded() { /* helper noop */ }
 
@@ -2288,7 +2320,7 @@ XLSX.utils.book_append_sheet(wb, wsInfo, 'Report Info');
         const anchorEvent = findCalendarEventByScheduleId(normalizedId) || dragSelectionEvents[0] || null;
         dragAnchorDate = anchorEvent ? anchorEvent.startStr : null;
         if (!dragSelectionEvents.length || !dragAnchorDate) { dragSelectionEvents = []; dragAnchorDate = null; return; }
-        isDragging = true; window.__multiSelectDragActive = true;
+        isDragging = true; window.__multiSelectDragActive = true; setGlobalDragFlag(true);
         createDragGhost(selectedSchedules.size, e.clientX, e.clientY);
         document.body.classList.add('no-select', 'no-transform-during-drag'); // FIX: lock transforms during ghost drag
         return;
@@ -2340,6 +2372,7 @@ XLSX.utils.book_append_sheet(wb, wsInfo, 'Report Info');
       removeDragGhost();
       isDragging = false;
       window.__multiSelectDragActive = false;
+      setGlobalDragFlag(false);
       document.body.classList.remove('no-select', 'no-transform-during-drag'); // FIX: cleanup
       buildCopiedFromSelected({ silent: true });
       return;
