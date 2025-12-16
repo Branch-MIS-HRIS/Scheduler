@@ -655,11 +655,11 @@ function initializeCalendar() {
     dayMaxEvents: true,
     height: 'auto',
 
-    eventDragStart(info) { document.body.classList.add('no-transform-during-drag'); },
-eventDragStop(info)  { document.body.classList.remove('no-transform-during-drag'); },
+    eventDragStart(info) { setGlobalDragFlag(true); document.body.classList.add('no-transform-during-drag'); },
+eventDragStop(info)  { setGlobalDragFlag(false); document.body.classList.remove('no-transform-during-drag'); },
 
-eventResizeStart(info) { document.body.classList.add('no-transform-during-drag'); },
-eventResizeStop(info)  { document.body.classList.remove('no-transform-during-drag'); },
+eventResizeStart(info) { setGlobalDragFlag(true); document.body.classList.add('no-transform-during-drag'); },
+eventResizeStop(info)  { setGlobalDragFlag(false); document.body.classList.remove('no-transform-during-drag'); },
 
     /* -------------------------
        External item received
@@ -921,10 +921,12 @@ function initializeDraggable() {
 if (calendar && typeof calendar.on === 'function' && !__calendarDragLiftWired) {
   calendar.on('eventDragStart', function () {
     // lock transforms to avoid cursor/mirror offset
+    setGlobalDragFlag(true);
     document.body.classList.add('no-transform-during-drag');
   });
 
   calendar.on('eventDragStop', function () {
+    setGlobalDragFlag(false);
     document.body.classList.remove('no-transform-during-drag');
   });
 
@@ -993,6 +995,7 @@ function handleSidebarCardDragStart(ev) {
   card.setAttribute('data-drag-payload', payloadJson);
   __isSidebarDragging = true;
   draggableCardsContainer?.classList.add('is-dragging');
+  setGlobalDragFlag(true);
   document.body.classList.add('no-transform-during-drag');
 
   if (ev.dataTransfer) {
@@ -1006,6 +1009,7 @@ function handleSidebarCardDragEnd(ev) {
   const card = ev.currentTarget;
   __isSidebarDragging = false;
   draggableCardsContainer?.classList.remove('is-dragging');
+  setGlobalDragFlag(false);
   document.body.classList.remove('no-transform-during-drag');
   if (card) card.removeAttribute('data-drag-payload');
 }
@@ -2272,17 +2276,26 @@ XLSX.utils.book_append_sheet(wb, wsInfo, 'Report Info');
   }
 
   // Mouse tracking for copy/paste hover
+  let mouseUpdateQueued = false;
   const updateMouse = e => {
     lastMouseX = e.clientX; lastMouseY = e.clientY;
-    const pill = e.target.closest?.('.schedule-pill');
-    if (pill) {
-      const id = getScheduleIdFromElement(pill);
-      if (id) hoveredScheduleId = id;
-    } else if (!document.elementFromPoint(lastMouseX,lastMouseY)?.closest('.schedule-pill')) {
-      hoveredScheduleId = null;
-    }
+    if (mouseUpdateQueued) return;
+    mouseUpdateQueued = true;
+    const runner = () => {
+      mouseUpdateQueued = false;
+      if (isDragPerfSuppressed()) return;
+      const pointerTarget = document.elementFromPoint(lastMouseX,lastMouseY);
+      const pill = pointerTarget?.closest('.schedule-pill');
+      if (pill) {
+        const id = getScheduleIdFromElement(pill);
+        if (id) hoveredScheduleId = id;
+      } else if (!pointerTarget?.closest('.schedule-pill')) {
+        hoveredScheduleId = null;
+      }
+    };
+    if (typeof requestAnimationFrame === 'function') requestAnimationFrame(runner); else setTimeout(runner, 16);
   };
-  document.addEventListener('mousemove', updateMouse);
+  document.addEventListener('mousemove', updateMouse, { passive: true });
 
   function clearTargetDateSelectionIfNeeded() { /* helper noop */ }
 
