@@ -1161,9 +1161,9 @@ body.multi-dragging { cursor: grabbing; }
   cursor: grabbing;
 }
 
-/* Prevent pointer/mirror offset: kill transforms while dragging */
-.no-transform-during-drag,
-.no-transform-during-drag * {
+/* Prevent pointer/mirror offset: neutralize pill hover transforms during drag only (keep FC mirrors intact) */
+.no-transform-during-drag .schedule-pill:not(.fc-mirror):not(.fc-event-mirror),
+.no-transform-during-drag .schedule-pill:not(.fc-mirror):not(.fc-event-mirror) * {
   transform: none !important;
   transition: none !important;
 }
