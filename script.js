@@ -1452,6 +1452,49 @@ function getConflicts() {
     }
   }
 
+  // Weekly requirement: employees marked mustHavePerWeek must have at least one event in each ISO week within the current range
+  {
+    let rangeStart = calendar?.view?.activeStart;
+    let rangeEnd = calendar?.view?.activeEnd;
+    const allEvents = calendar ? calendar.getEvents() : [];
+    if (!rangeStart || !rangeEnd) {
+      allEvents.forEach(ev => {
+        if (!rangeStart || ev.start < rangeStart) rangeStart = ev.start;
+        if (!rangeEnd || ev.start > rangeEnd) rangeEnd = ev.start;
+      });
+    }
+
+    const iterEnd = rangeEnd ? new Date(rangeEnd) : null;
+    if (rangeStart && iterEnd) {
+      if (iterEnd.getTime() === rangeStart.getTime()) iterEnd.setDate(iterEnd.getDate() + 1);
+      const weekKeysInRange = new Set();
+      const cursor = new Date(rangeStart);
+      while (cursor < iterEnd) {
+        weekKeysInRange.add(isoWeekKeyFromDate(cursor));
+        cursor.setDate(cursor.getDate() + 1);
+      }
+
+      for (const empNo in employees) {
+        if (employees[empNo]?.mustHavePerWeek !== true) continue;
+        const empEvents = eventsByEmp[empNo] || [];
+        const empWeekKeys = new Set();
+        empEvents.forEach(ev => { empWeekKeys.add(isoWeekKeyFromDate(ev.start)); });
+
+        weekKeysInRange.forEach(weekKey => {
+          if (!empWeekKeys.has(weekKey)) {
+            conflicts.push({
+              empNo,
+              date: weekKey,
+              rule: 'No Schedule This Week',
+              event: null,
+              virtualId: `missing-${empNo}-${weekKey}`
+            });
+          }
+        });
+      }
+    }
+  }
+
   return conflicts;
 }
 
@@ -1464,8 +1507,12 @@ function getConflicts() {
     const conflictEvents = new Set();
     const conflictTableEntries = {};
     conflicts.forEach(conflict => {
-      conflict.event.setExtendedProp('isConflict', true);
-      conflictEvents.add(conflict.event.extendedProps.id);
+      if (conflict.event) {
+        conflict.event.setExtendedProp('isConflict', true);
+        conflictEvents.add(conflict.event.extendedProps.id);
+      } else if (conflict.virtualId) {
+        conflictEvents.add(conflict.virtualId);
+      }
       const key = `${conflict.empNo}-${conflict.rule}`;
       if (!conflictTableEntries[key]) conflictTableEntries[key] = { empNo: conflict.empNo, rule: conflict.rule, dates: new Set() };
       conflictTableEntries[key].dates.add(conflict.date);
