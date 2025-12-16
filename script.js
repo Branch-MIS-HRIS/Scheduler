@@ -136,16 +136,23 @@ function getDateUnderPointer() {
     return [Math.round(h * 360), s, l];
   }
 
+  const gradientCache = new Map();
+
   function getGradientFromBaseColor(hex, type = 'work') {
     if (!hex || hex[0] !== '#') return '';
+    const cacheKey = `${hex}|${type}`;
+    const cached = gradientCache.get(cacheKey);
+    if (cached) return cached;
+
     const rgb = parseInt(hex.slice(1), 16);
     const r = (rgb >> 16) & 255, g = (rgb >> 8) & 255, b = rgb & 255;
     const [h, s, l] = rgbToHsl(r, g, b);
-    if (type === 'work') {
-      return `linear-gradient(135deg, hsl(${h}, ${Math.round(s*100)}%, ${Math.max(25, Math.round(l*100)-10)}%), hsl(${h}, ${Math.round(s*100)}%, ${Math.min(70, Math.round(l*100)+10)}%))`;
-    } else {
-      return `linear-gradient(135deg, hsl(${h}, ${Math.round(s*100)}%, ${Math.min(90, Math.round(l*100)+20)}%), hsl(${h}, ${Math.round(s*100)}%, ${Math.min(95, Math.round(l*100)+25)}%))`;
-    }
+    const gradient = (type === 'work')
+      ? `linear-gradient(135deg, hsl(${h}, ${Math.round(s*100)}%, ${Math.max(25, Math.round(l*100)-10)}%), hsl(${h}, ${Math.round(s*100)}%, ${Math.min(70, Math.round(l*100)+10)}%))`
+      : `linear-gradient(135deg, hsl(${h}, ${Math.round(s*100)}%, ${Math.min(90, Math.round(l*100)+20)}%), hsl(${h}, ${Math.round(s*100)}%, ${Math.min(95, Math.round(l*100)+25)}%))`;
+
+    gradientCache.set(cacheKey, gradient);
+    return gradient;
   }
 
   /* ===========================
@@ -230,6 +237,8 @@ function getDateUnderPointer() {
     return `${norm(r[1])} – ${norm(r[2])}`;
   }
 
+  const tooltipCache = new WeakMap();
+
   function buildEventTooltipContent(event) {
     if (!event) return '';
     const ext = event.extendedProps || {};
@@ -255,14 +264,40 @@ function getDateUnderPointer() {
     `;
   }
 
+  function getTooltipCacheKey(event) {
+    if (!event) return '';
+    const ext = event.extendedProps || {};
+    const empNo = ext.empNo ?? '';
+    const type = ext.type ?? '';
+    const shiftCode = ext.shiftCode ?? '';
+    const title = event.title ?? '';
+    const employee = employees?.[empNo] || {};
+    const position = employee.position || ext.position || '';
+    const shiftTime = shiftCode && shiftTimes[shiftCode] ? shiftTimes[shiftCode] : '';
+    return [empNo, type, shiftCode, title, position, shiftTime].join('|');
+  }
+
+  function getCachedTooltipContent(event) {
+    const key = getTooltipCacheKey(event);
+    const cached = tooltipCache.get(event);
+    if (cached && cached.key === key) return cached.content;
+
+    const content = buildEventTooltipContent(event);
+    tooltipCache.set(event, { key, content });
+    return content;
+  }
+
   function refreshEventTooltip(event, el) {
     if (!event || typeof tippy === 'undefined') return;
     const target = el || (typeof findEventElementByEvent === 'function' ? findEventElementByEvent(event) : null);
     if (!target) return;
-    const content = buildEventTooltipContent(event);
+    const content = getCachedTooltipContent(event);
     try {
-      if (target._tippy) target._tippy.setContent(content);
-      else tippy(target, { content, allowHTML: true, theme: 'light-border', placement: 'top' });
+      if (target._tippy) {
+        if (target._tippy.props?.content !== content) target._tippy.setContent(content);
+      } else {
+        tippy(target, { content, allowHTML: true, theme: 'light-border', placement: 'top' });
+      }
     } catch (e) {}
   }
 
@@ -1852,14 +1887,29 @@ XLSX.utils.book_append_sheet(wb, wsInfo, 'Report Info');
     if (typeof requestAnimationFrame === 'function') requestAnimationFrame(scheduler); else setTimeout(scheduler, 0);
   }
 
-  function decorateCalendarEvents() {
-    if (!calendar) return;
-    const allEvents = calendar.getEvents();
-    allEvents.forEach(ev => {
-      const el = findEventElementByEvent(ev);
-      if (!el) return;
-      decorateSingleEventElement(ev, el);
-    });
+  const pendingEventDecorations = new Set();
+  let decorationScheduled = false;
+
+  function flushPendingDecorations() {
+    decorationScheduled = false;
+    pendingEventDecorations.forEach(ev => decorateEventLater(ev));
+    pendingEventDecorations.clear();
+  }
+
+  function queueEventDecoration(event) {
+    if (!event) return;
+    pendingEventDecorations.add(event);
+    if (decorationScheduled) return;
+    decorationScheduled = true;
+    if (typeof requestAnimationFrame === 'function') requestAnimationFrame(flushPendingDecorations);
+    else setTimeout(flushPendingDecorations, 0);
+  }
+
+  function decorateCalendarEvents(targetEvents = null) {
+    const events = targetEvents
+      ? (Array.isArray(targetEvents) ? targetEvents : [targetEvents])
+      : (calendar ? calendar.getEvents() : []);
+    events.forEach(queueEventDecoration);
   }
 
   /* ===========================
@@ -2426,7 +2476,10 @@ XLSX.utils.book_append_sheet(wb, wsInfo, 'Report Info');
     try { initializeCalendar(); } catch (err) { console.error('initializeCalendar failed', err); }
     try { loadFromLocalStorage(); } catch (err) { console.error('loadFromLocalStorage failed', err); }
     try { if (!employeeTableBody || employeeTableBody.querySelectorAll('tr').length === 0) { addEmployeeRow(); } } catch (err) {}
-    try { decorateCalendarEvents(); calendar?.on('eventDidMount', decorateCalendarEvents); } catch (err) { console.error('decorateCalendarEvents failed', err); }
+    try {
+      decorateCalendarEvents();
+      calendar?.on('eventDidMount', info => queueEventDecoration(info?.event));
+    } catch (err) { console.error('decorateCalendarEvents failed', err); }
   }
 
   startScheduler();
