@@ -238,6 +238,25 @@ function getDateUnderPointer() {
   }
 
   const tooltipCache = new WeakMap();
+  let tooltipDelegateInstance = null;
+
+  const isDragPerfSuppressed = () => !!window.__globalDragActive;
+
+  function ensureTooltipDelegate() {
+    if (typeof tippy === 'undefined') return;
+    if (tooltipDelegateInstance) return;
+    tooltipDelegateInstance = tippy.delegate(document.body, {
+      target: '.schedule-pill[data-tooltip-content]',
+      allowHTML: true,
+      theme: 'light-border',
+      placement: 'top',
+      delay: [150, 50],
+      onShow(instance) {
+        const content = instance?.reference?.dataset?.tooltipContent;
+        if (content && instance.props.content !== content) instance.setContent(content);
+      }
+    });
+  }
 
   function buildEventTooltipContent(event) {
     if (!event) return '';
@@ -288,16 +307,15 @@ function getDateUnderPointer() {
   }
 
   function refreshEventTooltip(event, el) {
-    if (!event || typeof tippy === 'undefined') return;
+    if (!event || typeof tippy === 'undefined' || isDragPerfSuppressed()) return;
     const target = el || (typeof findEventElementByEvent === 'function' ? findEventElementByEvent(event) : null);
     if (!target) return;
     const content = getCachedTooltipContent(event);
     try {
-      if (target._tippy) {
-        if (target._tippy.props?.content !== content) target._tippy.setContent(content);
-      } else {
-        tippy(target, { content, allowHTML: true, theme: 'light-border', placement: 'top' });
-      }
+      if (target._tippy && target._tippy.destroy) { target._tippy.destroy(); }
+      if (target.dataset.tooltipContent !== content) target.dataset.tooltipContent = content;
+      target.setAttribute('data-tooltip-content', content || '');
+      ensureTooltipDelegate();
     } catch (e) {}
   }
 
@@ -368,6 +386,7 @@ function getDateUnderPointer() {
   let selectedTargetDates = new Set();
   let lastMouseX = 0, lastMouseY = 0;
   let isDragging = false, dragGhost = null;
+  const setGlobalDragFlag = active => { window.__globalDragActive = !!active; };
   let isSelectingDates = false, dateSelectStartEl = null;
   let dragAnchorDate = null;
   let dragSelectionEvents = [];
@@ -856,8 +875,8 @@ eventResizeStop(info)  { document.body.classList.remove('no-transform-during-dra
 
   calendar.render();
   // Safety: double-guard transform neutralization during drag/resize
-calendar.on('eventDragStart', () => document.body.classList.add('no-transform-during-drag'));
-calendar.on('eventDragStop',  () => document.body.classList.remove('no-transform-during-drag'));
+  calendar.on('eventDragStart', () => { setGlobalDragFlag(true); document.body.classList.add('no-transform-during-drag'); });
+  calendar.on('eventDragStop',  () => { setGlobalDragFlag(false); document.body.classList.remove('no-transform-during-drag'); });
 calendar.on('eventResizeStart', () => document.body.classList.add('no-transform-during-drag'));
 calendar.on('eventResizeStop',  () => document.body.classList.remove('no-transform-during-drag'));
   try { window.calendar = calendar; } catch (e) {}
@@ -2288,7 +2307,7 @@ XLSX.utils.book_append_sheet(wb, wsInfo, 'Report Info');
         const anchorEvent = findCalendarEventByScheduleId(normalizedId) || dragSelectionEvents[0] || null;
         dragAnchorDate = anchorEvent ? anchorEvent.startStr : null;
         if (!dragSelectionEvents.length || !dragAnchorDate) { dragSelectionEvents = []; dragAnchorDate = null; return; }
-        isDragging = true; window.__multiSelectDragActive = true;
+        isDragging = true; window.__multiSelectDragActive = true; setGlobalDragFlag(true);
         createDragGhost(selectedSchedules.size, e.clientX, e.clientY);
         document.body.classList.add('no-select', 'no-transform-during-drag'); // FIX: lock transforms during ghost drag
         return;
@@ -2340,6 +2359,7 @@ XLSX.utils.book_append_sheet(wb, wsInfo, 'Report Info');
       removeDragGhost();
       isDragging = false;
       window.__multiSelectDragActive = false;
+      setGlobalDragFlag(false);
       document.body.classList.remove('no-select', 'no-transform-during-drag'); // FIX: cleanup
       buildCopiedFromSelected({ silent: true });
       return;
