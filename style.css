@@ -1098,9 +1098,7 @@ body.multi-dragging { cursor: grabbing; }
 .executive-sidebar .employee-table {
   border-collapse: separate;
   border-spacing: 0 0.35rem;
-  width: 100%;
-  min-width: 0;
-  table-layout: fixed;
+  min-width: 520px;
 }
 
 .executive-sidebar .employee-table thead th {
@@ -1127,7 +1125,6 @@ body.multi-dragging { cursor: grabbing; }
   min-height: 2.4rem;
   font-size: 0.85rem;
   background: rgba(255, 255, 255, 0.9);
-  width: 100%;
 }
 
 .executive-sidebar .employee-table .remove-row-btn {
@@ -1138,22 +1135,6 @@ body.multi-dragging { cursor: grabbing; }
   justify-content: center;
 }
 
-.employee-col-name {
-  width: 35%;
-}
-
-.employee-col-no {
-  width: 25%;
-}
-
-.employee-col-position {
-  width: 32%;
-}
-
-.employee-col-actions {
-  width: 8%;
-}
-
 .employee-actions-group {
   gap: 0.5rem;
 }
@@ -1161,27 +1142,21 @@ body.multi-dragging { cursor: grabbing; }
 .employee-action-btn {
   min-height: 2.35rem;
   padding: 0.45rem 1rem;
-  flex: 1;
 }
 
 .employee-action-primary {
   min-height: 2.6rem;
   padding: 0.6rem 1.6rem;
   min-width: 190px;
-  flex: 1;
 }
 
 @media (max-width: 640px) {
+  .executive-sidebar .employee-table {
+    min-width: 100%;
+  }
+
   .employee-action-primary {
     width: 100%;
-  }
-
-  .employee-actions-group {
-    width: 100%;
-  }
-
-  .employee-action-btn {
-    flex: 1 1 48%;
   }
 }
 
