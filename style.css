@@ -856,6 +856,18 @@ body.multi-dragging { cursor: grabbing; }
   border: 1px solid rgba(226, 232, 240, 0.6);
 }
 
+.import-modal-panel {
+  max-width: min(960px, 96vw);
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.import-modal-body {
+  flex: 1;
+  overflow: auto;
+}
+
 /* Drag ghost styling */
 .drag-ghost {
   position: fixed;
@@ -1081,6 +1093,71 @@ body.multi-dragging { cursor: grabbing; }
   overflow-x: hidden;
   min-height: 0;
   padding-right: 6px;
+}
+
+.executive-sidebar .employee-table {
+  border-collapse: separate;
+  border-spacing: 0 0.35rem;
+  min-width: 520px;
+}
+
+.executive-sidebar .employee-table thead th {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: rgba(71, 85, 105, 0.85);
+  padding-bottom: 0.4rem;
+}
+
+.executive-sidebar .employee-table tbody tr {
+  background: rgba(255, 255, 255, 0.7);
+  border-radius: 12px;
+  box-shadow: 0 10px 20px rgba(15, 23, 42, 0.06);
+}
+
+.executive-sidebar .employee-table tbody td {
+  padding: 0.35rem;
+  vertical-align: middle;
+}
+
+.executive-sidebar .employee-table input,
+.executive-sidebar .employee-table select {
+  min-height: 2.4rem;
+  font-size: 0.85rem;
+  background: rgba(255, 255, 255, 0.9);
+}
+
+.executive-sidebar .employee-table .remove-row-btn {
+  width: 2rem;
+  height: 2rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.employee-actions-group {
+  gap: 0.5rem;
+}
+
+.employee-action-btn {
+  min-height: 2.35rem;
+  padding: 0.45rem 1rem;
+}
+
+.employee-action-primary {
+  min-height: 2.6rem;
+  padding: 0.6rem 1.6rem;
+  min-width: 190px;
+}
+
+@media (max-width: 640px) {
+  .executive-sidebar .employee-table {
+    min-width: 100%;
+  }
+
+  .employee-action-primary {
+    width: 100%;
+  }
 }
 
 .executive-sidebar .employee-scroll::-webkit-scrollbar {
