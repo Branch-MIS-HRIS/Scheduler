@@ -1184,6 +1184,24 @@ function finalizeSidebarEventDrop(newEvent) {
     return match || '';
   }
 
+  function ensurePositionOption(position) {
+    const trimmed = String(position || '').trim();
+    if (!trimmed) return '';
+    const match = findPositionMatch(trimmed);
+    if (match) return match;
+    positionOptions.push(trimmed);
+    document.querySelectorAll('.emp-pos').forEach(select => {
+      const exists = Array.from(select.options).some(option => option.value.toLowerCase() === trimmed.toLowerCase());
+      if (!exists) {
+        const option = document.createElement('option');
+        option.value = trimmed;
+        option.textContent = trimmed;
+        select.appendChild(option);
+      }
+    });
+    return trimmed;
+  }
+
   function normalizeHeaderValue(value) {
     if (value == null) return '';
     return String(value).trim().toLowerCase().replace(/[^a-z0-9]/g, '');
@@ -1213,6 +1231,7 @@ function finalizeSidebarEventDrop(newEvent) {
     if (confirmImportBtn) {
       confirmImportBtn.disabled = false;
       confirmImportBtn.classList.remove('opacity-50');
+      confirmImportBtn.classList.remove('hidden');
     }
     if (cancelImportBtn) {
       cancelImportBtn.textContent = 'Cancel';
@@ -1304,7 +1323,7 @@ function finalizeSidebarEventDrop(newEvent) {
       const empNo = row.empNo ? row.empNo.trim() : '';
       const name = row.name ? row.name.trim() : '';
       const rawPosition = row.position ? row.position.trim() : '';
-      const position = findPositionMatch(rawPosition);
+      const position = ensurePositionOption(rawPosition);
 
       if (!empNo || !name || !rawPosition) {
         summary.failed += 1;
@@ -1319,11 +1338,6 @@ function finalizeSidebarEventDrop(newEvent) {
       if (existingEmpNos.has(empNo)) {
         summary.skipped += 1;
         summary.details.push(`Row ${row.sourceRow}: Employee Number ${empNo} already exists.`);
-        return;
-      }
-      if (!position) {
-        summary.failed += 1;
-        summary.details.push(`Row ${row.sourceRow}: position "${rawPosition}" is not recognized.`);
         return;
       }
       seenInImport.add(empNo);
@@ -2732,9 +2746,10 @@ XLSX.utils.book_append_sheet(wb, wsInfo, 'Report Info');
         confirmImportBtn.textContent = 'Close';
         confirmImportBtn.disabled = false;
         confirmImportBtn.classList.remove('opacity-50');
+        confirmImportBtn.classList.add('hidden');
         if (cancelImportBtn) {
-          cancelImportBtn.textContent = 'Cancel';
-          cancelImportBtn.classList.add('hidden');
+          cancelImportBtn.textContent = 'Close';
+          cancelImportBtn.classList.remove('hidden');
         }
         const message = `Import complete: ${summary.imported} added, ${summary.skipped} skipped, ${summary.failed} failed.`;
         showToast(message, summary.failed ? 'warn' : 'success');
