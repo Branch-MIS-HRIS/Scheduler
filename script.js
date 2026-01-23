@@ -1010,23 +1010,32 @@ function setSidebarDragImage(ev, card) {
   clearSidebarDragImage();
 
   const rect = card.getBoundingClientRect();
+  const baseWidth = card.offsetWidth || rect.width || 0;
+  const baseHeight = card.offsetHeight || rect.height || 0;
+  const scaleX = baseWidth ? rect.width / baseWidth : 1;
+  const scaleY = baseHeight ? rect.height / baseHeight : 1;
   const clone = card.cloneNode(true);
   clone.style.position = 'fixed';
   clone.style.top = '-1000px';
   clone.style.left = '-1000px';
   clone.style.margin = '0';
-  clone.style.transform = 'none';
+  clone.style.transformOrigin = 'top left';
+  clone.style.transform = `scale(${scaleX}, ${scaleY})`;
   clone.style.pointerEvents = 'none';
   clone.style.boxSizing = 'border-box';
-  clone.style.width = `${rect.width}px`;
-  clone.style.height = `${rect.height}px`;
+  clone.style.width = `${baseWidth || rect.width}px`;
+  clone.style.height = `${baseHeight || rect.height}px`;
   document.body.appendChild(clone);
   sidebarDragImageEl = clone;
 
   const rawOffsetX = typeof ev.clientX === 'number' ? ev.clientX - rect.left : rect.width / 2;
   const rawOffsetY = typeof ev.clientY === 'number' ? ev.clientY - rect.top : rect.height / 2;
-  const offsetX = Math.min(rect.width, Math.max(0, Number.isFinite(rawOffsetX) ? rawOffsetX : rect.width / 2));
-  const offsetY = Math.min(rect.height, Math.max(0, Number.isFinite(rawOffsetY) ? rawOffsetY : rect.height / 2));
+  const normalizedOffsetX = Number.isFinite(rawOffsetX) ? rawOffsetX / (scaleX || 1) : (baseWidth || rect.width) / 2;
+  const normalizedOffsetY = Number.isFinite(rawOffsetY) ? rawOffsetY / (scaleY || 1) : (baseHeight || rect.height) / 2;
+  const maxOffsetX = baseWidth || rect.width;
+  const maxOffsetY = baseHeight || rect.height;
+  const offsetX = Math.min(maxOffsetX, Math.max(0, normalizedOffsetX));
+  const offsetY = Math.min(maxOffsetY, Math.max(0, normalizedOffsetY));
 
   try { ev.dataTransfer.setDragImage(clone, offsetX, offsetY); } catch (e) {}
 }
