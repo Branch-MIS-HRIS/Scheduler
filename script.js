@@ -2579,30 +2579,79 @@ XLSX.utils.book_append_sheet(wb, wsInfo, 'Report Info');
       isSelectingDates = true; dateSelectStartEl = day;
       if (!hasMultiSelectModifier(e)) clearTargetDateSelection();
       toggleTargetDateSelection(day, true);
+      rangeDayCells = Array.from(document.querySelectorAll('.fc-daygrid-day'));
+      rangeDayCells.forEach(dayEl => dayEl.classList.remove('range-selecting'));
+      lastRangeSelection = null;
       document.body.classList.add('no-select');
     }
   });
 
-  // FIX: ghost follows viewport coords exactly
-  document.addEventListener('mousemove', e => {
-    if (isDragging && dragGhost) {
-      dragGhost.style.left = `${e.clientX}px`;
-      dragGhost.style.top  = `${e.clientY}px`;
-      dragGhost.style.transform = 'translate(-50%, -50%)';
-    } else if (isSelectingDates && dateSelectStartEl) {
-      const currentEl = document.elementFromPoint(e.clientX, e.clientY);
-      if (currentEl && currentEl.closest('.fc-daygrid-day')) {
-        const currentDayEl = currentEl.closest('.fc-daygrid-day');
-        const allDays = Array.from(document.querySelectorAll('.fc-daygrid-day'));
-        const startIdx = allDays.indexOf(dateSelectStartEl);
-        const endIdx   = allDays.indexOf(currentDayEl);
-        allDays.forEach(day => day.classList.remove('range-selecting'));
-        if (startIdx !== -1 && endIdx !== -1) {
-          const [minIdx, maxIdx] = [Math.min(startIdx, endIdx), Math.max(startIdx, endIdx)];
-          for (let i = minIdx; i <= maxIdx; i++) allDays[i].classList.add('range-selecting');
-        }
+  let rangeDayCells = null;
+  let lastRangeSelection = null;
+  let dragFrameQueued = false;
+  let pendingDragPoint = null;
+
+  function updateRangeSelection(startIdx, endIdx) {
+    if (!rangeDayCells) return;
+    if (startIdx === -1 || endIdx === -1) {
+      if (lastRangeSelection) {
+        const { min, max } = lastRangeSelection;
+        for (let i = min; i <= max; i++) rangeDayCells[i]?.classList.remove('range-selecting');
+        lastRangeSelection = null;
+      }
+      return;
+    }
+
+    const minIdx = Math.min(startIdx, endIdx);
+    const maxIdx = Math.max(startIdx, endIdx);
+
+    if (lastRangeSelection && lastRangeSelection.min === minIdx && lastRangeSelection.max === maxIdx) return;
+
+    if (lastRangeSelection) {
+      const { min: prevMin, max: prevMax } = lastRangeSelection;
+      for (let i = prevMin; i <= prevMax; i++) {
+        if (i < minIdx || i > maxIdx) rangeDayCells[i]?.classList.remove('range-selecting');
       }
     }
+
+    for (let i = minIdx; i <= maxIdx; i++) {
+      if (!lastRangeSelection || i < lastRangeSelection.min || i > lastRangeSelection.max) {
+        rangeDayCells[i]?.classList.add('range-selecting');
+      }
+    }
+
+    lastRangeSelection = { min: minIdx, max: maxIdx };
+  }
+
+  function processDragFrame() {
+    dragFrameQueued = false;
+    if (!pendingDragPoint) return;
+    const { x, y } = pendingDragPoint;
+
+    if (isDragging && dragGhost) {
+      dragGhost.style.left = `${x}px`;
+      dragGhost.style.top = `${y}px`;
+      dragGhost.style.transform = 'translate(-50%, -50%)';
+      return;
+    }
+
+    if (isSelectingDates && dateSelectStartEl) {
+      if (!rangeDayCells) rangeDayCells = Array.from(document.querySelectorAll('.fc-daygrid-day'));
+      const currentEl = document.elementFromPoint(x, y);
+      const currentDayEl = currentEl?.closest?.('.fc-daygrid-day');
+      const startIdx = rangeDayCells.indexOf(dateSelectStartEl);
+      const endIdx = currentDayEl ? rangeDayCells.indexOf(currentDayEl) : -1;
+      updateRangeSelection(startIdx, endIdx);
+    }
+  }
+
+  // FIX: ghost follows viewport coords exactly (throttled)
+  document.addEventListener('mousemove', e => {
+    pendingDragPoint = { x: e.clientX, y: e.clientY };
+    if (dragFrameQueued) return;
+    dragFrameQueued = true;
+    if (typeof requestAnimationFrame === 'function') requestAnimationFrame(processDragFrame);
+    else setTimeout(processDragFrame, 16);
   });
 
   document.addEventListener('mouseup', e => {
@@ -2625,7 +2674,13 @@ XLSX.utils.book_append_sheet(wb, wsInfo, 'Report Info');
       buildCopiedFromSelected({ silent: true });
       return;
     }
-    if (isSelectingDates) { isSelectingDates = false; dateSelectStartEl = null; document.body.classList.remove('no-select'); }
+    if (isSelectingDates) {
+      isSelectingDates = false;
+      dateSelectStartEl = null;
+      rangeDayCells = null;
+      lastRangeSelection = null;
+      document.body.classList.remove('no-select');
+    }
   });
 
   function moveDraggedSchedules(targetDateStr) {
