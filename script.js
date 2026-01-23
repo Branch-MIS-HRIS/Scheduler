@@ -1177,6 +1177,13 @@ function finalizeSidebarEventDrop(newEvent) {
     if (posInput) posInput.value = position;
   }
 
+  function findPositionMatch(position) {
+    const normalized = String(position || '').trim().toLowerCase();
+    if (!normalized) return '';
+    const match = positionOptions.find(option => option.toLowerCase() === normalized);
+    return match || '';
+  }
+
   function normalizeHeaderValue(value) {
     if (value == null) return '';
     return String(value).trim().toLowerCase().replace(/[^a-z0-9]/g, '');
@@ -1207,7 +1214,10 @@ function finalizeSidebarEventDrop(newEvent) {
       confirmImportBtn.disabled = false;
       confirmImportBtn.classList.remove('opacity-50');
     }
-    if (cancelImportBtn) cancelImportBtn.textContent = 'Cancel';
+    if (cancelImportBtn) {
+      cancelImportBtn.textContent = 'Cancel';
+      cancelImportBtn.classList.remove('hidden');
+    }
   }
 
   function renderImportPreview(rows) {
@@ -1293,9 +1303,10 @@ function finalizeSidebarEventDrop(newEvent) {
     rows.forEach(row => {
       const empNo = row.empNo ? row.empNo.trim() : '';
       const name = row.name ? row.name.trim() : '';
-      const position = row.position ? row.position.trim() : '';
+      const rawPosition = row.position ? row.position.trim() : '';
+      const position = findPositionMatch(rawPosition);
 
-      if (!empNo || !name || !position) {
+      if (!empNo || !name || !rawPosition) {
         summary.failed += 1;
         summary.details.push(`Row ${row.sourceRow}: missing required fields.`);
         return;
@@ -1310,9 +1321,9 @@ function finalizeSidebarEventDrop(newEvent) {
         summary.details.push(`Row ${row.sourceRow}: Employee Number ${empNo} already exists.`);
         return;
       }
-      if (!positionOptions.includes(position)) {
+      if (!position) {
         summary.failed += 1;
-        summary.details.push(`Row ${row.sourceRow}: position "${position}" is not recognized.`);
+        summary.details.push(`Row ${row.sourceRow}: position "${rawPosition}" is not recognized.`);
         return;
       }
       seenInImport.add(empNo);
@@ -2721,7 +2732,10 @@ XLSX.utils.book_append_sheet(wb, wsInfo, 'Report Info');
         confirmImportBtn.textContent = 'Close';
         confirmImportBtn.disabled = false;
         confirmImportBtn.classList.remove('opacity-50');
-        if (cancelImportBtn) cancelImportBtn.textContent = 'Close';
+        if (cancelImportBtn) {
+          cancelImportBtn.textContent = 'Cancel';
+          cancelImportBtn.classList.add('hidden');
+        }
         const message = `Import complete: ${summary.imported} added, ${summary.skipped} skipped, ${summary.failed} failed.`;
         showToast(message, summary.failed ? 'warn' : 'success');
         return;
