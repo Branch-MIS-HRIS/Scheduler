@@ -49,6 +49,8 @@ function getDateUnderPointer() {
   =========================== */
   let employees = {};
   let employeeColors = JSON.parse(localStorage.getItem('employeeColors')) || {};
+  let pendingImportRows = [];
+  let importMode = 'preview';
   const BASE_EMPLOYEE_COLORS = [
     '#3b82f6','#10b981','#f59e0b','#8b5cf6','#ec4899','#14b8a6',
     '#ef4444','#22c55e','#eab308','#0ea5e9','#6366f1','#84cc16',
@@ -168,6 +170,7 @@ function getDateUnderPointer() {
   const shiftModal = document.getElementById('shift-modal');
   const exportModal = document.getElementById('export-modal');
   const deleteModal = document.getElementById('delete-modal');
+  const importModal = document.getElementById('import-modal');
 
   const shiftPresetSelect = document.getElementById('shift-preset');
   const shiftCustomInput = document.getElementById('shift-custom');
@@ -175,6 +178,14 @@ function getDateUnderPointer() {
   const confirmExportBtn = document.getElementById('confirm-export-btn');
   const confirmDeleteBtn = document.getElementById('confirm-delete-btn');
   const deleteModalSummary = document.getElementById('delete-modal-summary');
+  const importFileInput = document.getElementById('import-file-input');
+  const importPreviewBody = document.getElementById('import-preview-body');
+  const importPreviewNote = document.getElementById('import-preview-note');
+  const importSummaryPanel = document.getElementById('import-summary-panel');
+  const importSummaryCounts = document.getElementById('import-summary-counts');
+  const importSummaryList = document.getElementById('import-summary-list');
+  const confirmImportBtn = document.getElementById('confirm-import-btn');
+  const cancelImportBtn = document.getElementById('cancel-import-btn');
 
   // Stats
   const statsWork = document.getElementById('stats-work');
@@ -1153,6 +1164,214 @@ function finalizeSidebarEventDrop(newEvent) {
     tbody.appendChild(tr);
   }
 
+  function addEmployeeRowWithValues({ name = '', empNo = '', position = '' }) {
+    addEmployeeRow();
+    const rows = employeeTableBody ? employeeTableBody.querySelectorAll('tr') : [];
+    const lastRow = rows[rows.length - 1];
+    if (!lastRow) return;
+    const nameInput = lastRow.querySelector('.emp-name');
+    const noInput = lastRow.querySelector('.emp-no');
+    const posInput = lastRow.querySelector('.emp-pos');
+    if (nameInput) nameInput.value = name;
+    if (noInput) noInput.value = empNo;
+    if (posInput) posInput.value = position;
+  }
+
+  function normalizeHeaderValue(value) {
+    if (value == null) return '';
+    return String(value).trim().toLowerCase().replace(/[^a-z0-9]/g, '');
+  }
+
+  function findHeaderIndex(headers, candidates) {
+    const normalized = headers.map(normalizeHeaderValue);
+    return normalized.findIndex(item => candidates.includes(item));
+  }
+
+  function resetImportModalState() {
+    pendingImportRows = [];
+    importMode = 'preview';
+    if (importPreviewBody) {
+      importPreviewBody.innerHTML = `
+        <tr>
+          <td colspan="3" class="p-6 text-center text-gray-400">
+            Select a file to preview the first rows before importing.
+          </td>
+        </tr>`;
+    }
+    if (importPreviewNote) importPreviewNote.textContent = '';
+    if (importSummaryPanel) importSummaryPanel.classList.add('hidden');
+    if (importSummaryCounts) importSummaryCounts.textContent = '';
+    if (importSummaryList) importSummaryList.innerHTML = '';
+    if (confirmImportBtn) confirmImportBtn.textContent = 'Import Employees';
+    if (confirmImportBtn) {
+      confirmImportBtn.disabled = false;
+      confirmImportBtn.classList.remove('opacity-50');
+    }
+    if (cancelImportBtn) cancelImportBtn.textContent = 'Cancel';
+  }
+
+  function renderImportPreview(rows) {
+    if (!importPreviewBody) return;
+    const previewLimit = 15;
+    const previewRows = rows.slice(0, previewLimit);
+    if (previewRows.length === 0) {
+      importPreviewBody.innerHTML = `
+        <tr>
+          <td colspan="3" class="p-6 text-center text-gray-400">No employee rows found to preview.</td>
+        </tr>`;
+      if (importPreviewNote) importPreviewNote.textContent = '';
+      return;
+    }
+    importPreviewBody.innerHTML = previewRows.map(row => `
+      <tr>
+        <td class="p-3 text-gray-700">${escapeHtml(row.empNo)}</td>
+        <td class="p-3 text-gray-700">${escapeHtml(row.name)}</td>
+        <td class="p-3 text-gray-700">${escapeHtml(row.position)}</td>
+      </tr>`).join('');
+    if (importPreviewNote) {
+      const total = rows.length;
+      const note = total > previewLimit
+        ? `Showing ${previewLimit} of ${total} rows.`
+        : `Showing ${total} row${total === 1 ? '' : 's'}.`;
+      importPreviewNote.textContent = note;
+    }
+  }
+
+  function renderImportSummary(summary) {
+    if (!importSummaryPanel || !importSummaryCounts || !importSummaryList) return;
+    importSummaryPanel.classList.remove('hidden');
+    importSummaryCounts.textContent = `Imported ${summary.imported} row${summary.imported === 1 ? '' : 's'}, skipped ${summary.skipped} row${summary.skipped === 1 ? '' : 's'}, failed ${summary.failed} row${summary.failed === 1 ? '' : 's'}.`;
+    const lines = [];
+    summary.details.forEach(item => {
+      lines.push(`<li>${escapeHtml(item)}</li>`);
+    });
+    importSummaryList.innerHTML = lines.length ? lines.join('') : '<li>No issues detected.</li>';
+  }
+
+  function extractEmployeeRowsFromSheet(sheet) {
+    const rawRows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
+    const headerRowIndex = rawRows.findIndex(row => Array.isArray(row) && row.some(cell => String(cell).trim() !== ''));
+    if (headerRowIndex === -1) {
+      return { error: 'No header row detected in the selected file.' };
+    }
+    const headers = rawRows[headerRowIndex] || [];
+    const requiredHeaderOptions = {
+      empNo: ['employeenumber', 'employeeno', 'empno', 'employeeid', 'employeenum', 'employeenumber'],
+      name: ['employeename', 'name', 'fullname'],
+      position: ['position', 'role', 'title']
+    };
+    const empNoIndex = findHeaderIndex(headers, requiredHeaderOptions.empNo);
+    const nameIndex = findHeaderIndex(headers, requiredHeaderOptions.name);
+    const positionIndex = findHeaderIndex(headers, requiredHeaderOptions.position);
+    const missing = [];
+    if (empNoIndex === -1) missing.push('Employee Number');
+    if (nameIndex === -1) missing.push('Employee Name');
+    if (positionIndex === -1) missing.push('Position');
+    if (missing.length) {
+      return { error: `Missing required column(s): ${missing.join(', ')}.` };
+    }
+    const dataRows = rawRows.slice(headerRowIndex + 1).filter(row => Array.isArray(row) && row.some(cell => String(cell).trim() !== ''));
+    const mapped = dataRows.map((row, idx) => ({
+      empNo: row[empNoIndex] != null ? String(row[empNoIndex]).trim() : '',
+      name: row[nameIndex] != null ? String(row[nameIndex]).trim() : '',
+      position: row[positionIndex] != null ? String(row[positionIndex]).trim() : '',
+      sourceRow: headerRowIndex + 2 + idx
+    }));
+    return { rows: mapped };
+  }
+
+  function applyImportedEmployees(rows) {
+    const summary = { imported: 0, skipped: 0, failed: 0, details: [] };
+    const existingEmpNos = new Set();
+    const tableRows = employeeTableBody ? employeeTableBody.querySelectorAll('tr') : [];
+    tableRows.forEach(row => {
+      const noInput = row.querySelector('.emp-no');
+      const empNo = noInput ? noInput.value.trim() : '';
+      if (empNo) existingEmpNos.add(empNo);
+    });
+    const seenInImport = new Set();
+    rows.forEach(row => {
+      const empNo = row.empNo ? row.empNo.trim() : '';
+      const name = row.name ? row.name.trim() : '';
+      const position = row.position ? row.position.trim() : '';
+
+      if (!empNo || !name || !position) {
+        summary.failed += 1;
+        summary.details.push(`Row ${row.sourceRow}: missing required fields.`);
+        return;
+      }
+      if (seenInImport.has(empNo)) {
+        summary.skipped += 1;
+        summary.details.push(`Row ${row.sourceRow}: duplicate Employee Number ${empNo} in import file.`);
+        return;
+      }
+      if (existingEmpNos.has(empNo)) {
+        summary.skipped += 1;
+        summary.details.push(`Row ${row.sourceRow}: Employee Number ${empNo} already exists.`);
+        return;
+      }
+      if (!positionOptions.includes(position)) {
+        summary.failed += 1;
+        summary.details.push(`Row ${row.sourceRow}: position "${position}" is not recognized.`);
+        return;
+      }
+      seenInImport.add(empNo);
+      existingEmpNos.add(empNo);
+      addEmployeeRowWithValues({ name, empNo, position });
+      summary.imported += 1;
+    });
+    return summary;
+  }
+
+  function handleImportFile(file) {
+    if (!file) return;
+    const fileName = file.name || '';
+    const ext = fileName.split('.').pop().toLowerCase();
+    const allowedExtensions = ['xlsx', 'numbers'];
+    if (!allowedExtensions.includes(ext)) {
+      showToast('Please upload an Excel (.xlsx) or Apple Numbers (.numbers) file.', 'error');
+      return;
+    }
+    if (typeof XLSX === 'undefined') {
+      showToast('Import requires the XLSX library, which is unavailable.', 'error');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const data = new Uint8Array(event.target.result);
+        const workbook = XLSX.read(data, { type: 'array' });
+        const sheetName = workbook.SheetNames[0];
+        if (!sheetName) {
+          showToast('No worksheet found in the uploaded file.', 'error');
+          return;
+        }
+        const result = extractEmployeeRowsFromSheet(workbook.Sheets[sheetName]);
+        if (result.error) {
+          showToast(result.error, 'error');
+          return;
+        }
+        pendingImportRows = result.rows || [];
+        renderImportPreview(pendingImportRows);
+        importMode = 'preview';
+        if (importSummaryPanel) importSummaryPanel.classList.add('hidden');
+        if (confirmImportBtn) {
+          confirmImportBtn.textContent = 'Import Employees';
+          confirmImportBtn.disabled = pendingImportRows.length === 0;
+          confirmImportBtn.classList.toggle('opacity-50', confirmImportBtn.disabled);
+        }
+        if (importModal) importModal.classList.remove('hidden');
+      } catch (error) {
+        console.error('Import parse error:', error);
+        showToast('Unable to read that file. If using Numbers, export to .xlsx first.', 'error');
+      }
+    };
+    reader.onerror = () => {
+      showToast('Unable to read the selected file.', 'error');
+    };
+    reader.readAsArrayBuffer(file);
+  }
+
   function removeEmployeeRow(buttonEl) {
     if (!employeeTableBody) return;
     if (employeeTableBody.rows.length > 1) {
@@ -1378,6 +1597,10 @@ function finalizeSidebarEventDrop(newEvent) {
     }
     if (modalId === 'shift-modal') { currentDroppingEvent = null; isEditingExistingEvent = false; }
     if (modalId === 'delete-modal') { currentDeletingEvent = null; }
+    if (modalId === 'import-modal') {
+      resetImportModalState();
+      if (importFileInput) importFileInput.value = '';
+    }
   }
 
   function showToast(message, type = 'info') {
@@ -2474,6 +2697,39 @@ XLSX.utils.book_append_sheet(wb, wsInfo, 'Report Info');
   });
   try { window.addEmployeeRow = addEmployeeRow; } catch(e){}
 
+  const importBtnEl = document.getElementById('import-btn');
+  if (importBtnEl && importFileInput) {
+    importBtnEl.addEventListener('click', () => importFileInput.click());
+  }
+  if (importFileInput) {
+    importFileInput.addEventListener('change', (event) => {
+      const file = event.target.files && event.target.files[0];
+      handleImportFile(file);
+      importFileInput.value = '';
+    });
+  }
+  if (confirmImportBtn) {
+    confirmImportBtn.addEventListener('click', () => {
+      if (importMode === 'preview') {
+        if (!pendingImportRows.length) {
+          showToast('No employee rows available to import.', 'warn');
+          return;
+        }
+        const summary = applyImportedEmployees(pendingImportRows);
+        renderImportSummary(summary);
+        importMode = 'summary';
+        confirmImportBtn.textContent = 'Close';
+        confirmImportBtn.disabled = false;
+        confirmImportBtn.classList.remove('opacity-50');
+        if (cancelImportBtn) cancelImportBtn.textContent = 'Close';
+        const message = `Import complete: ${summary.imported} added, ${summary.skipped} skipped, ${summary.failed} failed.`;
+        showToast(message, summary.failed ? 'warn' : 'success');
+        return;
+      }
+      handleCloseModal('import-modal');
+    });
+  }
+
   const saveGenerateBtnEl = document.getElementById('save-generate-btn');
   if (saveGenerateBtnEl) saveGenerateBtnEl.addEventListener('click', saveAndGenerate);
   if (employeeTableBody) {
@@ -2502,6 +2758,7 @@ XLSX.utils.book_append_sheet(wb, wsInfo, 'Report Info');
       if (shiftModal && !shiftModal.classList.contains('hidden')) handleCloseModal('shift-modal');
       if (exportModal && !exportModal.classList.contains('hidden')) handleCloseModal('export-modal');
       if (deleteModal && !deleteModal.classList.contains('hidden')) handleCloseModal('delete-modal');
+      if (importModal && !importModal.classList.contains('hidden')) handleCloseModal('import-modal');
     }
   });
 
