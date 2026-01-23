@@ -397,6 +397,7 @@ function getDateUnderPointer() {
   let selectedTargetDates = new Set();
   let lastMouseX = 0, lastMouseY = 0;
   let isDragging = false, dragGhost = null;
+  let sidebarDragImageEl = null;
   const setGlobalDragFlag = active => { window.__globalDragActive = !!active; };
   let isSelectingDates = false, dateSelectStartEl = null;
   let dragAnchorDate = null;
@@ -994,6 +995,42 @@ function prepareSidebarEventPayload(eventEl) {
   }
 }
 
+function clearSidebarDragImage() {
+  if (!sidebarDragImageEl) return;
+  try {
+    sidebarDragImageEl.remove();
+  } catch (e) {
+    if (sidebarDragImageEl.parentNode) sidebarDragImageEl.parentNode.removeChild(sidebarDragImageEl);
+  }
+  sidebarDragImageEl = null;
+}
+
+function setSidebarDragImage(ev, card) {
+  if (!ev?.dataTransfer || !card) return;
+  clearSidebarDragImage();
+
+  const rect = card.getBoundingClientRect();
+  const clone = card.cloneNode(true);
+  clone.style.position = 'fixed';
+  clone.style.top = '-1000px';
+  clone.style.left = '-1000px';
+  clone.style.margin = '0';
+  clone.style.transform = 'none';
+  clone.style.pointerEvents = 'none';
+  clone.style.boxSizing = 'border-box';
+  clone.style.width = `${rect.width}px`;
+  clone.style.height = `${rect.height}px`;
+  document.body.appendChild(clone);
+  sidebarDragImageEl = clone;
+
+  const rawOffsetX = typeof ev.clientX === 'number' ? ev.clientX - rect.left : rect.width / 2;
+  const rawOffsetY = typeof ev.clientY === 'number' ? ev.clientY - rect.top : rect.height / 2;
+  const offsetX = Math.min(rect.width, Math.max(0, Number.isFinite(rawOffsetX) ? rawOffsetX : rect.width / 2));
+  const offsetY = Math.min(rect.height, Math.max(0, Number.isFinite(rawOffsetY) ? rawOffsetY : rect.height / 2));
+
+  try { ev.dataTransfer.setDragImage(clone, offsetX, offsetY); } catch (e) {}
+}
+
 function handleSidebarCardDragStart(ev) {
   const card = ev.currentTarget;
   const payload = prepareSidebarEventPayload(card);
@@ -1008,6 +1045,7 @@ function handleSidebarCardDragStart(ev) {
   draggableCardsContainer?.classList.add('is-dragging');
   setGlobalDragFlag(true);
   document.body.classList.add('no-transform-during-drag');
+  setSidebarDragImage(ev, card);
 
   if (ev.dataTransfer) {
     try { ev.dataTransfer.effectAllowed = 'copyMove'; } catch (e) {}
@@ -1022,6 +1060,7 @@ function handleSidebarCardDragEnd(ev) {
   draggableCardsContainer?.classList.remove('is-dragging');
   setGlobalDragFlag(false);
   document.body.classList.remove('no-transform-during-drag');
+  clearSidebarDragImage();
   if (card) card.removeAttribute('data-drag-payload');
 }
 
