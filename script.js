@@ -397,6 +397,8 @@ function getDateUnderPointer() {
   let selectedTargetDates = new Set();
   let lastMouseX = 0, lastMouseY = 0;
   let isDragging = false, dragGhost = null;
+  let calendarDragGhost = null;
+  let calendarDragMoveHandler = null;
   let sidebarDragImageEl = null;
   const setGlobalDragFlag = active => { window.__globalDragActive = !!active; };
   let isSelectingDates = false, dateSelectStartEl = null;
@@ -609,6 +611,67 @@ function getDateUnderPointer() {
     return { color, workGradient, restGradient };
   }
 
+  function moveCalendarEventDragPreview(x, y) {
+    if (!calendarDragGhost || typeof x !== 'number' || typeof y !== 'number') return;
+    calendarDragGhost.style.left = `${x}px`;
+    calendarDragGhost.style.top = `${y}px`;
+  }
+
+  function stopCalendarEventDragPreview() {
+    if (calendarDragMoveHandler) {
+      document.removeEventListener('mousemove', calendarDragMoveHandler, true);
+      document.removeEventListener('pointermove', calendarDragMoveHandler, true);
+      calendarDragMoveHandler = null;
+    }
+    if (calendarDragGhost) {
+      calendarDragGhost.remove();
+      calendarDragGhost = null;
+    }
+    document.body.classList.remove('calendar-event-dragging');
+  }
+
+  function startCalendarEventDragPreview(info) {
+    if (!info || !info.event || window.__multiSelectDragActive) return;
+    stopCalendarEventDragPreview();
+
+    const event = info.event;
+    const type = event.extendedProps?.type === 'rest' ? 'rest' : 'work';
+    const shiftCode = event.extendedProps?.shiftCode || '';
+    const empNo = event.extendedProps?.empNo;
+    const color = empNo ? ensureEmployeeColor(empNo) : null;
+    const ghost = document.createElement('div');
+    ghost.className = `calendar-drag-ghost fc-event-pill schedule-pill fc-event-${type}`;
+    ghost.innerHTML = `<div class="pill-content"><span class="pill-name">${escapeHtml(event.title || '')}</span>${shiftCode ? `<span class="pill-shift">${escapeHtml(shiftCode)}</span>` : ''}</div>`;
+
+    if (color) {
+      const gradient = getGradientFromBaseColor(color, type);
+      if (gradient) ghost.style.setProperty('background', gradient, 'important');
+      if (type === 'rest') {
+        ghost.style.setProperty('color', color, 'important');
+        ghost.style.setProperty('border', `2px solid ${color}`, 'important');
+      } else {
+        ghost.style.setProperty('color', '#fff', 'important');
+        ghost.style.setProperty('border', 'none', 'important');
+      }
+    }
+
+    document.body.appendChild(ghost);
+    calendarDragGhost = ghost;
+    document.body.classList.add('calendar-event-dragging', 'no-transform-during-drag');
+
+    const startX = info.jsEvent?.clientX ?? lastMouseX;
+    const startY = info.jsEvent?.clientY ?? lastMouseY;
+    moveCalendarEventDragPreview(startX, startY);
+
+    calendarDragMoveHandler = ev => {
+      lastMouseX = ev.clientX;
+      lastMouseY = ev.clientY;
+      moveCalendarEventDragPreview(ev.clientX, ev.clientY);
+    };
+    document.addEventListener('mousemove', calendarDragMoveHandler, true);
+    document.addEventListener('pointermove', calendarDragMoveHandler, true);
+  }
+
 /* ===========================
    CALENDAR INIT (improved)
 =========================== */
@@ -667,8 +730,16 @@ function initializeCalendar() {
     dayMaxEvents: true,
     height: 'auto',
 
-    eventDragStart(info) { setGlobalDragFlag(true); document.body.classList.add('no-transform-during-drag'); },
-eventDragStop(info)  { setGlobalDragFlag(false); document.body.classList.remove('no-transform-during-drag'); },
+    eventDragStart(info) {
+      setGlobalDragFlag(true);
+      document.body.classList.add('no-transform-during-drag');
+      startCalendarEventDragPreview(info);
+    },
+eventDragStop(info)  {
+      setGlobalDragFlag(false);
+      document.body.classList.remove('no-transform-during-drag');
+      stopCalendarEventDragPreview();
+    },
 
 eventResizeStart(info) { setGlobalDragFlag(true); document.body.classList.add('no-transform-during-drag'); },
 eventResizeStop(info)  { setGlobalDragFlag(false); document.body.classList.remove('no-transform-during-drag'); },
@@ -887,8 +958,16 @@ eventResizeStop(info)  { setGlobalDragFlag(false); document.body.classList.remov
 
   calendar.render();
   // Safety: double-guard transform neutralization during drag/resize
-  calendar.on('eventDragStart', () => { setGlobalDragFlag(true); document.body.classList.add('no-transform-during-drag'); });
-  calendar.on('eventDragStop',  () => { setGlobalDragFlag(false); document.body.classList.remove('no-transform-during-drag'); });
+  calendar.on('eventDragStart', info => {
+    setGlobalDragFlag(true);
+    document.body.classList.add('no-transform-during-drag');
+    startCalendarEventDragPreview(info);
+  });
+  calendar.on('eventDragStop',  () => {
+    setGlobalDragFlag(false);
+    document.body.classList.remove('no-transform-during-drag');
+    stopCalendarEventDragPreview();
+  });
 calendar.on('eventResizeStart', () => document.body.classList.add('no-transform-during-drag'));
 calendar.on('eventResizeStop',  () => document.body.classList.remove('no-transform-during-drag'));
   try { window.calendar = calendar; } catch (e) {}
@@ -931,15 +1010,17 @@ function initializeDraggable() {
 
 // Cosmetic lift while dragging inside the calendar — wire once
 if (calendar && typeof calendar.on === 'function' && !__calendarDragLiftWired) {
-  calendar.on('eventDragStart', function () {
+  calendar.on('eventDragStart', function (info) {
     // lock transforms to avoid cursor/mirror offset
     setGlobalDragFlag(true);
     document.body.classList.add('no-transform-during-drag');
+    startCalendarEventDragPreview(info);
   });
 
   calendar.on('eventDragStop', function () {
     setGlobalDragFlag(false);
     document.body.classList.remove('no-transform-during-drag');
+    stopCalendarEventDragPreview();
   });
 
   __calendarDragLiftWired = true;

@@ -690,7 +690,7 @@ tbody tr td:first-child {
   font-size: 10px;
   line-height: 1.2;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
   box-shadow: 0 6px 18px rgba(2,6,23,0.06);
   display: flex;
   align-items: center;
@@ -900,6 +900,29 @@ body.multi-dragging { cursor: grabbing; }
 .drag-ghost-hint {
   color: var(--muted);
   font-weight: 500;
+}
+
+/* Existing calendar event drag preview: keep the visible pill under the cursor. */
+.calendar-drag-ghost {
+  position: fixed !important;
+  z-index: 10000 !important;
+  left: 0;
+  top: 0;
+  transform: translate(-50%, -50%) !important;
+  pointer-events: none !important;
+  width: max-content !important;
+  min-width: 120px;
+  max-width: min(420px, 80vw);
+  margin: 0 !important;
+  opacity: 0.96;
+  box-shadow: 0 18px 38px rgba(15, 23, 42, 0.28);
+}
+
+body.calendar-event-dragging .fc-event-mirror,
+body.calendar-event-dragging .fc-mirror,
+body.calendar-event-dragging .fc-event.fc-event-dragging,
+body.calendar-event-dragging .fc-event.fc-dragging {
+  opacity: 0 !important;
 }
 
 /* (NEW) While dragging selections, stop accidental text selection */
@@ -1253,10 +1276,17 @@ body.multi-dragging { cursor: grabbing; }
   cursor: grabbing;
 }
 
-/* Prevent pointer/mirror offset: neutralize pill hover transforms during drag only (keep FC mirrors + actively dragged pills intact) */
+/* Prevent pointer/mirror offset: neutralize pill hover/selection scale during drag. */
+.no-transform-during-drag .fc-event-pill:not(.fc-mirror):not(.fc-event-mirror):not(.fc-event-dragging):not(.fc-dragging),
+.no-transform-during-drag .fc-event-pill:not(.fc-mirror):not(.fc-event-mirror):not(.fc-event-dragging):not(.fc-dragging) *,
 .no-transform-during-drag .schedule-pill:not(.fc-mirror):not(.fc-event-mirror):not(.fc-event-dragging):not(.fc-dragging),
 .no-transform-during-drag .schedule-pill:not(.fc-mirror):not(.fc-event-mirror):not(.fc-event-dragging):not(.fc-dragging) * {
   transform: none !important;
+  transition: none !important;
+}
+
+.no-transform-during-drag .calendar-drag-ghost {
+  transform: translate(-50%, -50%) !important;
   transition: none !important;
 }
 
