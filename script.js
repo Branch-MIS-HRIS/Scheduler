@@ -1778,9 +1778,9 @@ function finalizeSidebarEventDrop(newEvent) {
      CONFLICT DETECTION (kept)
   =========================== */
 
-// Weekend rest counting: Friday/Saturday/Sunday all count toward the SAME week.
-// Change this if you want a different cap:
-const WEEKEND_REST_WEEK_LIMIT = 2;
+// Weekend RD rule copied from the schedule checker app.
+const WEEKEND_REST_MONTH_LIMIT = 4;
+const WEEKEND_REST_DAYS = ['Friday', 'Saturday', 'Sunday'];
 
 // ISO week key (YYYY-Www). Week starts Monday (ISO-8601).
 function isoWeekKeyFromDate(d) {
@@ -1812,6 +1812,30 @@ fri.setDate(dt.getDate() + deltaToFri);
   return `${y}-${m}-${d2}`;
 }
 
+function getLocalDateKey(dateLike) {
+  const d = dateLike instanceof Date ? dateLike : new Date(dateLike);
+  if (Number.isNaN(d.getTime())) return '';
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+function getWeekStartLocalKey(dateLike) {
+  const d = dateLike instanceof Date ? new Date(dateLike) : new Date(dateLike);
+  if (Number.isNaN(d.getTime())) return '';
+  const day = d.getDay();
+  const mondayOffset = day === 0 ? -6 : 1 - day;
+  d.setDate(d.getDate() + mondayOffset);
+  return getLocalDateKey(d);
+}
+
+function getDayNameLocal(dateLike) {
+  const d = dateLike instanceof Date ? dateLike : new Date(dateLike);
+  if (Number.isNaN(d.getTime())) return '';
+  return ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][d.getDay()] || '';
+}
+
 function getGroupedEvents() {
   const allEvents = calendar ? calendar.getEvents() : [];
   const eventsByDate = {}, eventsByEmp = {};
@@ -1826,6 +1850,7 @@ function getGroupedEvents() {
 function getConflicts() {
   const { eventsByDate, eventsByEmp } = getGroupedEvents();
   let conflicts = [];
+  const allEvents = calendar ? calendar.getEvents() : [];
 
   // Same-day Work & Rest conflict
   for (const date in eventsByDate) {
@@ -1848,6 +1873,43 @@ function getConflicts() {
     }
   }
 
+  // Duplicate dates within the same schedule type, matching app-51-fixed.js.
+  ['work', 'rest'].forEach(type => {
+    const seen = new Map();
+    const label = type === 'work' ? 'Work Schedule' : 'Rest Day Schedule';
+    allEvents.forEach(event => {
+      if (event.extendedProps?.type !== type) return;
+      const empNo = event.extendedProps?.empNo;
+      const date = event.startStr;
+      if (!empNo || !date) return;
+      const key = `${empNo}-${date}`;
+      if (seen.has(key)) {
+        const other = seen.get(key);
+        conflicts.push({ empNo, date, rule: `Duplicate date in ${label}`, event: other });
+        conflicts.push({ empNo, date, rule: `Duplicate date in ${label}`, event });
+      } else {
+        seen.set(key, event);
+      }
+    });
+  });
+
+  // RD employee must also have at least one WS row/event.
+  const workEmpNos = new Set(allEvents
+    .filter(event => event.extendedProps?.type === 'work' && event.extendedProps?.empNo)
+    .map(event => String(event.extendedProps.empNo)));
+
+  allEvents.forEach(event => {
+    const empNo = event.extendedProps?.empNo;
+    if (event.extendedProps?.type === 'rest' && empNo && !workEmpNos.has(String(empNo))) {
+      conflicts.push({
+        empNo,
+        date: event.startStr,
+        rule: 'Employee not found in Work Schedule',
+        event
+      });
+    }
+  });
+
   // Multiple managers resting same day
   for (const date in eventsByDate) {
     const managerRestEvents = eventsByDate[date].filter(event => {
@@ -1859,39 +1921,70 @@ function getConflicts() {
     }
   }
 
-  // Weekend rest week cap (Fri/Sat/Sun count as one "weekend" anchored to Friday)
-  for (const empNo in eventsByEmp) {
-    const weeksMap = new Map(); // fridayKey -> events in that Fri–Sun group
-    eventsByEmp[empNo].forEach(event => {
-      if (event.extendedProps.type !== 'rest') return;
-      const key = weekendWeekKeyLocal(event.start);
-      if (!key) return; // not Fri/Sat/Sun
-      if (!weeksMap.has(key)) weeksMap.set(key, []);
-      weeksMap.get(key).push(event);
+  // Weekend RD validation copied from app-51-fixed.js:
+  // Friday/Saturday/Sunday count as weekend groups per employee/month,
+  // Saturday-Sunday consecutive RD is not allowed, and max is 4 groups/month.
+  const employeeMonthWeekMap = {};
+  allEvents.forEach(event => {
+    if (event.extendedProps?.type !== 'rest') return;
+    const empNo = event.extendedProps?.empNo;
+    if (!empNo || !event.start) return;
+
+    const dayName = getDayNameLocal(event.start);
+    if (!WEEKEND_REST_DAYS.includes(dayName)) return;
+
+    const year = event.start.getFullYear();
+    const month = event.start.getMonth() + 1;
+    const empKey = `${empNo}-${year}-${month}`;
+    const weekKey = getWeekStartLocalKey(event.start);
+    if (!weekKey) return;
+
+    if (!employeeMonthWeekMap[empKey]) employeeMonthWeekMap[empKey] = {};
+    if (!employeeMonthWeekMap[empKey][weekKey]) employeeMonthWeekMap[empKey][weekKey] = [];
+    employeeMonthWeekMap[empKey][weekKey].push({ event, empNo, dayName });
+  });
+
+  Object.values(employeeMonthWeekMap).forEach(weeks => {
+    let weekendGroupCount = 0;
+
+    Object.values(weeks).forEach(entries => {
+      const days = entries.map(e => e.dayName);
+      const hasFriday = days.includes('Friday');
+      const hasSaturday = days.includes('Saturday');
+      const hasSunday = days.includes('Sunday');
+
+      if (hasSaturday && hasSunday) {
+        entries
+          .filter(e => e.dayName === 'Saturday' || e.dayName === 'Sunday')
+          .forEach(e => {
+            conflicts.push({
+              empNo: e.empNo,
+              date: e.event.startStr,
+              rule: 'Saturday-Sunday consecutive Rest Days are not allowed.',
+              event: e.event
+            });
+          });
+      }
+
+      if (hasFriday || hasSaturday || hasSunday) weekendGroupCount++;
     });
 
-    // Keep earliest two; flag excess (use .reverse() if you prefer latest two)
-    const weekKeys = Array.from(weeksMap.keys()).sort();
-    if (weekKeys.length > WEEKEND_REST_WEEK_LIMIT) {
-      const excessWeekKeys = weekKeys.slice(WEEKEND_REST_WEEK_LIMIT);
-      excessWeekKeys.forEach(wk => {
-        (weeksMap.get(wk) || []).forEach(event => {
-          conflicts.push({
-            empNo,
-            date: event.startStr,
-            rule: `Exceeds ${WEEKEND_REST_WEEK_LIMIT} Weekend Rest Weeks`,
-            event
-          });
+    if (weekendGroupCount > WEEKEND_REST_MONTH_LIMIT) {
+      Object.values(weeks).flat().forEach(e => {
+        conflicts.push({
+          empNo: e.empNo,
+          date: e.event.startStr,
+          rule: `Maximum weekend RD groups exceeded. Allowed maximum is ${WEEKEND_REST_MONTH_LIMIT} per month.`,
+          event: e.event
         });
       });
     }
-  }
+  });
 
   // Weekly requirement: employees marked mustHavePerWeek must have at least one event in each ISO week within the current range
   {
     let rangeStart = calendar?.view?.activeStart;
     let rangeEnd = calendar?.view?.activeEnd;
-    const allEvents = calendar ? calendar.getEvents() : [];
     if (!rangeStart || !rangeEnd) {
       allEvents.forEach(ev => {
         if (!rangeStart || ev.start < rangeStart) rangeStart = ev.start;
