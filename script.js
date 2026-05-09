@@ -459,7 +459,7 @@ function getDateUnderPointer() {
 
   function scheduleCalendarMaintenance(options = {}) {
     const {
-      delay = 90,
+      delay = 40,
       conflicts = true,
       stats = true,
       save = true
@@ -469,12 +469,27 @@ function getDateUnderPointer() {
     calendarMaintenanceTimer = setTimeout(() => {
       calendarMaintenanceTimer = null;
       const runner = () => runCalendarMaintenance({ conflicts, stats, save });
-      if (typeof requestIdleCallback === 'function') {
+      if (!conflicts && typeof requestIdleCallback === 'function') {
         requestIdleCallback(runner, { timeout: 600 });
       } else {
         runner();
       }
     }, delay);
+  }
+
+  function ensureConflictPlaceholderRow() {
+    if (!conflictTableBody) return null;
+    let row = document.getElementById('conflicts-placeholder');
+    if (!row) {
+      row = document.createElement('tr');
+      row.id = 'conflicts-placeholder';
+      row.innerHTML = `
+        <td colspan="4" class="p-6 text-center text-gray-500">
+          No conflicts detected.
+        </td>
+      `;
+    }
+    return row;
   }
 
   function setEventConflictFlag(event, active) {
@@ -581,7 +596,7 @@ function getDateUnderPointer() {
             decorateEventLater(addedEvent);
           }
         });
-        scheduleCalendarMaintenance({ delay: 140, save: false });
+        scheduleCalendarMaintenance({ delay: 40, save: false });
       }
     } catch (err) { console.warn('loadFromLocalStorage error', err); }
   }
@@ -895,6 +910,8 @@ eventResizeStop(info)  { setGlobalDragFlag(false); document.body.classList.remov
     },
 
     eventRemove() { scheduleCalendarMaintenance(); },
+    eventAdd() { scheduleCalendarMaintenance({ delay: 20, save: false }); },
+    eventChange() { scheduleCalendarMaintenance({ delay: 20 }); },
 
     eventClick(info) {
       if (info.jsEvent && hasMultiSelectModifier(info.jsEvent)) { info.jsEvent.preventDefault(); return; }
@@ -2034,6 +2051,7 @@ function getConflicts() {
           if (event.extendedProps?.isConflict) setEventConflictFlag(event, false);
         });
       }
+      const placeholderRow = ensureConflictPlaceholderRow();
       if (conflictTableBody) conflictTableBody.innerHTML = '';
 
       const conflicts = getConflicts();
@@ -2066,7 +2084,10 @@ function getConflicts() {
           fragment.appendChild(tr);
         });
         conflictTableBody.appendChild(fragment);
-      } else { if (conflictsPlaceholder) conflictsPlaceholder.classList.remove('hidden'); }
+      } else if (conflictTableBody && placeholderRow) {
+        placeholderRow.classList.remove('hidden');
+        conflictTableBody.appendChild(placeholderRow);
+      }
 
       updateStats(conflictEvents.size);
     });
