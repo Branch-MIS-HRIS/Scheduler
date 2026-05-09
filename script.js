@@ -400,6 +400,7 @@ function getDateUnderPointer() {
   let calendarDragGhost = null;
   let calendarDragMoveHandler = null;
   let sidebarDragImageEl = null;
+  let calendarMaintenanceTimer = null;
   const setGlobalDragFlag = active => { window.__globalDragActive = !!active; };
   let isSelectingDates = false, dateSelectStartEl = null;
   let dragAnchorDate = null;
@@ -436,6 +437,44 @@ function getDateUnderPointer() {
       localStorage.setItem('events', JSON.stringify(allEvents));
       localStorage.setItem('employeeColors', JSON.stringify(employeeColors));
     } catch (err) { console.warn('saveToLocalStorage error', err); }
+  }
+
+  function runWithCalendarBatch(callback) {
+    if (calendar && typeof calendar.batchRendering === 'function') {
+      calendar.batchRendering(callback);
+    } else {
+      callback();
+    }
+  }
+
+  function runCalendarMaintenance(options = {}) {
+    const { conflicts = true, stats = true, save = true } = options;
+    if (conflicts) {
+      runConflictDetection();
+    } else if (stats) {
+      updateStats();
+    }
+    if (save) saveToLocalStorage();
+  }
+
+  function scheduleCalendarMaintenance(options = {}) {
+    const {
+      delay = 90,
+      conflicts = true,
+      stats = true,
+      save = true
+    } = options;
+
+    if (calendarMaintenanceTimer) clearTimeout(calendarMaintenanceTimer);
+    calendarMaintenanceTimer = setTimeout(() => {
+      calendarMaintenanceTimer = null;
+      const runner = () => runCalendarMaintenance({ conflicts, stats, save });
+      if (typeof requestIdleCallback === 'function') {
+        requestIdleCallback(runner, { timeout: 600 });
+      } else {
+        runner();
+      }
+    }, delay);
   }
 
   function loadFromLocalStorage() {
@@ -535,8 +574,7 @@ function getDateUnderPointer() {
             decorateEventLater(addedEvent);
           }
         });
-        runConflictDetection();
-        updateStats();
+        scheduleCalendarMaintenance({ delay: 140, save: false });
       }
     } catch (err) { console.warn('loadFromLocalStorage error', err); }
   }
@@ -861,12 +899,10 @@ eventResizeStop(info)  { setGlobalDragFlag(false); document.body.classList.remov
         }
       }
 
-      runConflictDetection();
-      updateStats();
-      saveToLocalStorage();
+      scheduleCalendarMaintenance();
     },
 
-    eventRemove() { runConflictDetection(); updateStats(); saveToLocalStorage(); },
+    eventRemove() { scheduleCalendarMaintenance(); },
 
     eventClick(info) {
       if (info.jsEvent && hasMultiSelectModifier(info.jsEvent)) { info.jsEvent.preventDefault(); return; }
@@ -1236,9 +1272,7 @@ function finalizeSidebarEventDrop(newEvent) {
     currentDroppingEvent = newEvent;
     openShiftModal();
   } else {
-    runConflictDetection();
-    updateStats();
-    saveToLocalStorage();
+    scheduleCalendarMaintenance();
   }
 
   try { newEvent.setProp('title', newEvent.title); } catch (e) {}
@@ -1700,8 +1734,7 @@ function finalizeSidebarEventDrop(newEvent) {
       try { currentDroppingEvent.setProp('classNames', Array.from(classSet)); } catch (e) {}
       decorateEventLater(currentDroppingEvent);
       refreshEventTooltip(currentDroppingEvent);
-      if (calendar && typeof calendar.rerenderEvents === 'function') { calendar.rerenderEvents(); }
-      runConflictDetection(); updateStats(); saveToLocalStorage();
+      scheduleCalendarMaintenance();
     }
     if (shiftModal) closeModal(shiftModal);
     currentDroppingEvent = null; isEditingExistingEvent = false;
@@ -1716,7 +1749,11 @@ function finalizeSidebarEventDrop(newEvent) {
   }
 
   function handleConfirmDelete() {
-    if (currentDeletingEvent) { currentDeletingEvent.remove(); showToast('Schedule entry removed.', 'info'); saveToLocalStorage(); }
+    if (currentDeletingEvent) {
+      currentDeletingEvent.remove();
+      showToast('Schedule entry removed.', 'info');
+      scheduleCalendarMaintenance();
+    }
     if (deleteModal) closeModal(deleteModal);
     currentDeletingEvent = null;
   }
@@ -1747,7 +1784,9 @@ function finalizeSidebarEventDrop(newEvent) {
     const modalEl = document.getElementById(modalId);
     closeModal(modalEl);
     if (modalId === 'shift-modal' && currentDroppingEvent && !isEditingExistingEvent) {
-      currentDroppingEvent.remove(); showToast('Schedule add canceled.', 'info'); saveToLocalStorage();
+      currentDroppingEvent.remove();
+      showToast('Schedule add canceled.', 'info');
+      scheduleCalendarMaintenance();
     }
     if (modalId === 'shift-modal') { currentDroppingEvent = null; isEditingExistingEvent = false; }
     if (modalId === 'delete-modal') { currentDeletingEvent = null; }
@@ -1934,41 +1973,49 @@ function getConflicts() {
 }
 
   function runConflictDetection() {
-    const { allEvents } = getGroupedEvents();
-    if (allEvents && allEvents.forEach) allEvents.forEach(event => event.setExtendedProp('isConflict', false));
-    if (conflictTableBody) conflictTableBody.innerHTML = '';
-
-    const conflicts = getConflicts();
-    const conflictEvents = new Set();
-    const conflictTableEntries = {};
-    conflicts.forEach(conflict => {
-      if (conflict.event) {
-        conflict.event.setExtendedProp('isConflict', true);
-        conflictEvents.add(conflict.event.extendedProps.id);
-      } else if (conflict.virtualId) {
-        conflictEvents.add(conflict.virtualId);
+    runWithCalendarBatch(() => {
+      const { allEvents } = getGroupedEvents();
+      if (allEvents && allEvents.forEach) {
+        allEvents.forEach(event => {
+          if (event.extendedProps?.isConflict) event.setExtendedProp('isConflict', false);
+        });
       }
-      const key = `${conflict.empNo}-${conflict.rule}`;
-      if (!conflictTableEntries[key]) conflictTableEntries[key] = { empNo: conflict.empNo, rule: conflict.rule, dates: new Set() };
-      conflictTableEntries[key].dates.add(conflict.date);
-    });
+      if (conflictTableBody) conflictTableBody.innerHTML = '';
 
-    if (Object.keys(conflictTableEntries).length > 0 && conflictTableBody) {
-      if (conflictsPlaceholder) conflictsPlaceholder.classList.add('hidden');
-      Object.values(conflictTableEntries).forEach(entry => {
-        const emp = employees[entry.empNo] || { name: entry.empNo, empNo: entry.empNo };
-        const tr = document.createElement('tr');
-        tr.className = 'bg-yellow-50 border-b border-yellow-200';
-        tr.innerHTML = `
-          <td class="p-3 font-medium text-yellow-900">${emp.name}</td>
-          <td class="p-3 text-yellow-800">${emp.empNo}</td>
-          <td class="p-3 text-yellow-800">${entry.rule}</td>
-          <td class="p-3 text-yellow-800">${[...entry.dates].join(', ')}</td>`;
-        conflictTableBody.appendChild(tr);
+      const conflicts = getConflicts();
+      const conflictEvents = new Set();
+      const conflictTableEntries = {};
+      conflicts.forEach(conflict => {
+        if (conflict.event) {
+          if (!conflict.event.extendedProps?.isConflict) conflict.event.setExtendedProp('isConflict', true);
+          conflictEvents.add(conflict.event.extendedProps.id);
+        } else if (conflict.virtualId) {
+          conflictEvents.add(conflict.virtualId);
+        }
+        const key = `${conflict.empNo}-${conflict.rule}`;
+        if (!conflictTableEntries[key]) conflictTableEntries[key] = { empNo: conflict.empNo, rule: conflict.rule, dates: new Set() };
+        conflictTableEntries[key].dates.add(conflict.date);
       });
-    } else { if (conflictsPlaceholder) conflictsPlaceholder.classList.remove('hidden'); }
 
-    updateStats(conflictEvents.size);
+      if (Object.keys(conflictTableEntries).length > 0 && conflictTableBody) {
+        if (conflictsPlaceholder) conflictsPlaceholder.classList.add('hidden');
+        const fragment = document.createDocumentFragment();
+        Object.values(conflictTableEntries).forEach(entry => {
+          const emp = employees[entry.empNo] || { name: entry.empNo, empNo: entry.empNo };
+          const tr = document.createElement('tr');
+          tr.className = 'bg-yellow-50 border-b border-yellow-200';
+          tr.innerHTML = `
+            <td class="p-3 font-medium text-yellow-900">${emp.name}</td>
+            <td class="p-3 text-yellow-800">${emp.empNo}</td>
+            <td class="p-3 text-yellow-800">${entry.rule}</td>
+            <td class="p-3 text-yellow-800">${[...entry.dates].join(', ')}</td>`;
+          fragment.appendChild(tr);
+        });
+        conflictTableBody.appendChild(fragment);
+      } else { if (conflictsPlaceholder) conflictsPlaceholder.classList.remove('hidden'); }
+
+      updateStats(conflictEvents.size);
+    });
   }
 
   /* ===========================
@@ -2631,7 +2678,7 @@ XLSX.utils.book_append_sheet(wb, wsInfo, 'Report Info');
 
     clearScheduleSelection();
     if (createdIdsForBatch.length) { pasteHistory.push(createdIdsForBatch); if (pasteHistory.length > 20) pasteHistory.shift(); }
-    runConflictDetection(); updateStats(); saveToLocalStorage();
+    scheduleCalendarMaintenance();
     showToastWrapper(`Pasted ${added} schedule${added !== 1 ? 's' : ''} (${skipped} skipped).`, added ? 'success' : 'warn');
     clearTargetDateSelection();
   }
@@ -2648,7 +2695,7 @@ XLSX.utils.book_append_sheet(wb, wsInfo, 'Report Info');
       if (match) { match.remove(); removed++; }
     });
     if (!removed) { showToastWrapper('Nothing to undo.', 'warn'); return; }
-    runConflictDetection(); updateStats(); saveToLocalStorage();
+    scheduleCalendarMaintenance();
     showToastWrapper(`Undid paste (${removed} schedule${removed !== 1 ? 's' : ''} removed).`, 'info');
   }
 
@@ -2846,7 +2893,7 @@ XLSX.utils.book_append_sheet(wb, wsInfo, 'Report Info');
     queueSelectionReset(dragSelectionEvents.map(ev => ev.extendedProps?.id || ev.id));
     clearTargetDateSelection();
     dragAnchorDate = targetDateStr;
-    runConflictDetection(); updateStats(); saveToLocalStorage();
+    scheduleCalendarMaintenance();
     showToastWrapper(`Moved ${plannedMoves.length} schedule${plannedMoves.length !== 1 ? 's' : ''}.`, 'success');
     return true;
   }
