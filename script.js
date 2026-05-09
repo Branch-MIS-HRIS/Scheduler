@@ -477,6 +477,13 @@ function getDateUnderPointer() {
     }, delay);
   }
 
+  function setEventConflictFlag(event, active) {
+    if (!event) return;
+    if (event.extendedProps) event.extendedProps.isConflict = !!active;
+    const el = findEventElementByEvent(event);
+    if (el) el.classList.toggle('fc-event-conflict', !!active);
+  }
+
   function loadFromLocalStorage() {
     try {
       const storedEmployees = JSON.parse(localStorage.getItem('employees'));
@@ -766,6 +773,8 @@ function initializeCalendar() {
     dragScroll: false,
     selectable: true,
     dayMaxEvents: true,
+    progressiveEventRendering: true,
+    eventOrderStrict: false,
     height: 'auto',
 
     eventDragStart(info) {
@@ -831,26 +840,9 @@ eventResizeStop(info)  { setGlobalDragFlag(false); document.body.classList.remov
        Plain DOM drop fallback
     ------------------------- */
     drop(info) {
-      const payload = normalizeSidebarPayload(
-        parseSidebarDragPayload(info.draggedEl, info.jsEvent?.dataTransfer)
-      );
-      if (!payload || !calendar) return;
-
-      const eventProps = {
-        title:
-          payload.title ||
-          (info.draggedEl ? info.draggedEl.textContent?.trim() : '') ||
-          'Shift',
-        start: info.dateStr || (info.date ? info.date.toISOString() : undefined),
-        allDay: true,
-        classNames: Array.from(new Set(['fc-event-pill', ...(payload.classNames || [])])),
-        extendedProps: payload.extendedProps,
-      };
-      if (payload.id) eventProps.id = payload.id;
-
-      const newEvent = calendar.addEvent(eventProps);
-      if (!newEvent) return;
-      finalizeSidebarEventDrop(newEvent);
+      // FullCalendar also calls eventReceive for these draggable sidebar pills.
+      // Keeping this as a no-op prevents duplicate add/finalize work on every drop.
+      if (info?.jsEvent?.preventDefault) info.jsEvent.preventDefault();
     },
 
     /* -------------------------
@@ -993,19 +985,6 @@ eventResizeStop(info)  { setGlobalDragFlag(false); document.body.classList.remov
   });
 
   calendar.render();
-  // Safety: double-guard transform neutralization during drag/resize
-  calendar.on('eventDragStart', info => {
-    setGlobalDragFlag(true);
-    document.body.classList.add('no-transform-during-drag');
-    startCalendarEventDragPreview(info);
-  });
-  calendar.on('eventDragStop',  () => {
-    setGlobalDragFlag(false);
-    document.body.classList.remove('no-transform-during-drag');
-    stopCalendarEventDragPreview();
-  });
-calendar.on('eventResizeStart', () => document.body.classList.add('no-transform-during-drag'));
-calendar.on('eventResizeStop',  () => document.body.classList.remove('no-transform-during-drag'));
   try { window.calendar = calendar; } catch (e) {}
 }
 
@@ -1043,24 +1022,6 @@ function initializeDraggable() {
   // Wire each pill for native HTML5 drag only once
   const sidebarPills = draggableCardsContainer.querySelectorAll('.fc-event-pill');
   sidebarPills.forEach(card => wireSidebarCardDrag(card));
-
-// Cosmetic lift while dragging inside the calendar — wire once
-if (calendar && typeof calendar.on === 'function' && !__calendarDragLiftWired) {
-  calendar.on('eventDragStart', function (info) {
-    // lock transforms to avoid cursor/mirror offset
-    setGlobalDragFlag(true);
-    document.body.classList.add('no-transform-during-drag');
-    startCalendarEventDragPreview(info);
-  });
-
-  calendar.on('eventDragStop', function () {
-    setGlobalDragFlag(false);
-    document.body.classList.remove('no-transform-during-drag');
-    stopCalendarEventDragPreview();
-  });
-
-  __calendarDragLiftWired = true;
-}
 
   // Guard against body transforms during external HTML5 drag — wire once
   if (!__bodyDragGuardsWired) {
@@ -1977,7 +1938,7 @@ function getConflicts() {
       const { allEvents } = getGroupedEvents();
       if (allEvents && allEvents.forEach) {
         allEvents.forEach(event => {
-          if (event.extendedProps?.isConflict) event.setExtendedProp('isConflict', false);
+          if (event.extendedProps?.isConflict) setEventConflictFlag(event, false);
         });
       }
       if (conflictTableBody) conflictTableBody.innerHTML = '';
@@ -1987,7 +1948,7 @@ function getConflicts() {
       const conflictTableEntries = {};
       conflicts.forEach(conflict => {
         if (conflict.event) {
-          if (!conflict.event.extendedProps?.isConflict) conflict.event.setExtendedProp('isConflict', true);
+          if (!conflict.event.extendedProps?.isConflict) setEventConflictFlag(conflict.event, true);
           conflictEvents.add(conflict.event.extendedProps.id);
         } else if (conflict.virtualId) {
           conflictEvents.add(conflict.virtualId);
